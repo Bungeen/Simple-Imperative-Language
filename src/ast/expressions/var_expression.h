@@ -1,22 +1,26 @@
 #pragma once
 
-#include "expression.h"
-#include "json_format.h"
-
 #include <ostream>
 #include <string>
 #include <utility>
 
+#include "expression.h"
+#include "json_format.h"
+
 
 class Var : public Expr {
 public:
-    std::string name;
-
     Var(std::string name) 
-        : name(std::move(name))
+        : name_(std::move(name))
     {}
 
     void show(std::ostream& os) const {
-        os << "{\"" << json_format::VAR << "\":\"" << name << "\"}";
+        os << "{\"" << json_format::VAR << "\":\"" << name_ << "\"}";
     }
+
+    const std::string& get_var_name() const {
+        return name_;
+    }
+private:
+    std::string name_;
 };

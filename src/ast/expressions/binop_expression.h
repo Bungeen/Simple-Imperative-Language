@@ -10,20 +10,33 @@
 
 class BinOpExpr : public Expr {
 public:
-    BinOp op;
-    ExprPtr lhs, rhs;
-
     BinOpExpr(BinOp op, ExprPtr lhs, ExprPtr rhs)
-        : op(op)
-        , lhs(std::move(lhs))
-        , rhs(std::move(rhs))
+        : op_(op)
+        , lhs_(std::move(lhs))
+        , rhs_(std::move(rhs))
     {}
 
+    const Expr& get_lhs() const {
+        return *lhs_;
+    } 
+
+    const Expr& get_rhs() const {
+        return *rhs_;
+    } 
+
+    BinOp get_operation() const {
+        return op_;
+    }
+
     void show(std::ostream& os) const {
-        os << "{\"" << json_format::BINOP << "\":\"" << spelling(op) << "\",\"" << json_format::LEFT << "\":";
-        lhs->show(os);
+        os << "{\"" << json_format::BINOP << "\":\"" << spelling(op_) << "\",\"" << json_format::LEFT << "\":";
+        lhs_->show(os);
         os << ",\"" << json_format::RIGHT << "\":";
-        rhs->show(os);
+        rhs_->show(os);
         os << '}';
     }
+private:
+    BinOp op_;
+    ExprPtr lhs_;
+    ExprPtr rhs_;
 };

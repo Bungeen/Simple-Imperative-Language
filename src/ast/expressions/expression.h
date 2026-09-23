@@ -2,7 +2,6 @@
 
 #include <memory>
 
-
 #include "node.h"
 
 class Expr : public Node {};

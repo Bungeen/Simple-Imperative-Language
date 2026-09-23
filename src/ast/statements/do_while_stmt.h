@@ -1,28 +1,36 @@
 #pragma once
 
+#include <ostream>
+#include <utility>
+
 #include "stmt.h"
 #include "expression.h"
 #include "json_format.h"
 
-#include <ostream>
-#include <utility>
-
 
 class DoWhileStmt : public Stmt {
-private:
-    StmtPtr body;
-    ExprPtr cond;
 public:
     DoWhileStmt(StmtPtr body, ExprPtr cond)
-        : body(std::move(body))
-        , cond(std::move(cond))
+        : body_(std::move(body))
+        , cond_(std::move(cond))
     {}
+
+    const Expr& get_condition() const {
+        return *cond_;
+    } 
+
+    const Stmt& get_body() const {
+        return *body_;
+    } 
 
     void show(std::ostream& os) const {
         os << "{\"" << json_format::DO_WHILE << "\":{\"" << json_format::BODY << "\":";
-        body->show(os);
+        body_->show(os);
         os << ",\"" << json_format::COND << "\":";
-        cond->show(os);
+        cond_->show(os);
         os << "}}";
     }
+private:
+    StmtPtr body_;
+    ExprPtr cond_;
 };

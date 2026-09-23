@@ -1,21 +1,26 @@
 #pragma once
 
-#include "expression.h"
-#include "json_format.h"
-
 #include <cstdint>
 #include <ostream>
+
+#include "expression.h"
+#include "json_format.h"
+#include "value.h"
 
 
 class Const : public Expr {
 public:
-    const std::int64_t value;
-
     Const(std::int64_t value) 
-        : value(value)
+        : value_(value)
     {}
 
-    void show(std::ostream& os) const {
-        os << "{\"" << json_format::CONST << "\":" << value << '}';
+    const Value& get_value() const  {
+        return value_;
     }
+
+    void show(std::ostream& os) const {
+        os << "{\"" << json_format::CONST << "\":" << value_ << '}';
+    }
+private:
+    const Value value_;
 };

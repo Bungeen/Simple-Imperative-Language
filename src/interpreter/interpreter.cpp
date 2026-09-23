@@ -4,10 +4,10 @@
 #include <stdexcept>
 
 
-constexpr std::int64_t minimum = std::numeric_limits<std::int64_t>::min();
-constexpr std::int64_t maximum = std::numeric_limits<std::int64_t>::max();
+constexpr Value minimum = std::numeric_limits<Value>::min();
+constexpr Value maximum = std::numeric_limits<Value>::max();
 
-std::int64_t add(std::int64_t left, std::int64_t right) {
+Value add(Value left, Value right) {
     if ((right > 0 && left > maximum - right)
         || (right < 0 && left < minimum - right)) {
         throw std::runtime_error("integer overflow in +");
@@ -16,7 +16,7 @@ std::int64_t add(std::int64_t left, std::int64_t right) {
     return left + right;
 }
 
-std::int64_t subtract(std::int64_t left, std::int64_t right) {
+Value subtract(Value left, Value right) {
     if ((right > 0 && left < minimum + right)
         || (right < 0 && left > maximum + right)) {
         throw std::runtime_error("integer overflow in -");
@@ -25,7 +25,7 @@ std::int64_t subtract(std::int64_t left, std::int64_t right) {
     return left - right;
 }
 
-std::int64_t multiply(std::int64_t left, std::int64_t right) {
+Value multiply(Value left, Value right) {
     bool overflow = false;
 
     if (left > 0) {
@@ -55,7 +55,7 @@ Interpreter::Interpreter(std::istream& input, std::ostream& output)
     , output(output)
 {}
 
-std::int64_t Interpreter::get_variable(const std::string& name) const {
+Value Interpreter::get_variable(const std::string& name) const {
     auto variable = variables.find(name);
 
     if (variable == variables.end()) {
@@ -65,7 +65,7 @@ std::int64_t Interpreter::get_variable(const std::string& name) const {
     return variable->second;
 }
 
-std::int64_t Interpreter::apply(BinOp op, std::int64_t left, const Expr& right) {
+Value Interpreter::apply(BinOp op, Value left, const Expr& right) {
     if (op == BinOp::Or && left != 0) {
         return 1;
     }
@@ -74,7 +74,7 @@ std::int64_t Interpreter::apply(BinOp op, std::int64_t left, const Expr& right) 
         return 0;
     }
 
-    std::int64_t rhs = evaluate(right);
+    Value rhs = evaluate(right);
 
     switch (op) {
         case BinOp::Or:
@@ -136,17 +136,17 @@ std::int64_t Interpreter::apply(BinOp op, std::int64_t left, const Expr& right) 
 
 std::int64_t Interpreter::evaluate(const Expr& expression) {
     if (const auto* node = dynamic_cast<const Const*>(&expression)) {
-        return node->value;
+        return node->get_value();
     }
 
     if (const auto* node = dynamic_cast<const Var*>(&expression)) {
-        return get_variable(node->name);
+        return get_variable(node->get_var_name());
     }
 
     if (const auto* node = dynamic_cast<const BinOpExpr*>(&expression)) {
-        std::int64_t left = evaluate(*node->lhs);
+        std::int64_t left = evaluate(node->get_lhs());
 
-        return apply(node->op, left, *node->rhs);
+        return apply(node->get_operation(), left, node->get_rhs());
     }
 
     throw std::runtime_error("unknown expression node");
@@ -154,8 +154,8 @@ std::int64_t Interpreter::evaluate(const Expr& expression) {
 
 void Interpreter::execute(const Stmt& statement) {
     if (const auto* node = dynamic_cast<const SeqStmt*>(&statement)) {
-        execute(*node->lhs);
-        execute(*node->rhs);
+        execute(node->get_lhs());
+        execute(node->get_rhs());
 
         return;
     }
@@ -168,29 +168,29 @@ void Interpreter::execute(const Stmt& statement) {
         std::string token;
 
         if (!(input >> token)) {
-            throw std::runtime_error("read(" + node->name + "): expected an integer");
+            throw std::runtime_error("read(" + node->get_variable_name() + "): expected an integer");
         }
 
         std::size_t consumed = 0;
-        std::int64_t value;
+        Value value;
 
         try {
             value = std::stoll(token, &consumed, 10);
         } catch (const std::exception&) {
-            throw std::runtime_error("read(" + node->name + "): expected an int64 integer");
+            throw std::runtime_error("read(" + node->get_variable_name() + "): expected an int64 integer");
         }
 
         if (consumed != token.size()) {
-            throw std::runtime_error("read(" + node->name + "): invalid integer: " + token);
+            throw std::runtime_error("read(" + node->get_variable_name() + "): invalid integer: " + token);
         }
 
-        variables[node->name] = value;
+        variables[node->get_variable_name()] = value;
 
         return;
     }
 
     if (const auto* node = dynamic_cast<const WriteStmt*>(&statement)) {
-        std::int64_t value = evaluate(*node->value);
+        Value value = evaluate(node->get_value());
         output << value << '\n';
 
         if (!output) {
@@ -201,33 +201,25 @@ void Interpreter::execute(const Stmt& statement) {
     }
 
     if (const auto* node = dynamic_cast<const AssignStmt*>(&statement)) {
-        std::int64_t value = evaluate(*node->src);
-        variables[node->dst] = value;
-
-        return;
-    }
-
-    if (const auto* node = dynamic_cast<const CompoundAssignStmt*>(&statement)) {
-        std::int64_t left = get_variable(node->dst);
-        std::int64_t value = apply(node->op, left, *node->src);
-        variables[node->dst] = value;
+        Value value = evaluate(node->get_src());
+        variables[node->get_dst()] = value;
 
         return;
     }
 
     if (const auto* node = dynamic_cast<const IfStmt*>(&statement)) {
-        if (evaluate(*node->cond) != 0) {
-            execute(*node->thenBranch);
-        } else if (node->elseBranch) {
-            execute(*node->elseBranch);
+        if (evaluate(node->get_condition()) != 0) {
+            execute(node->get_then_branch());
+        } else {
+            execute(node->get_else_branch());
         }
 
         return;
     }
 
     if (const auto* node = dynamic_cast<const WhileStmt*>(&statement)) {
-        while (evaluate(*node->cond) != 0) {
-            execute(*node->body);
+        while (evaluate(node->get_condition()) != 0) {
+            execute(node->get_body());
         }
 
         return;
@@ -235,19 +227,8 @@ void Interpreter::execute(const Stmt& statement) {
 
     if (const auto* node = dynamic_cast<const DoWhileStmt*>(&statement)) {
         do {
-            execute(*node->body);
-        } while (evaluate(*node->cond) != 0);
-
-        return;
-    }
-
-    if (const auto* node = dynamic_cast<const ForStmt*>(&statement)) {
-        execute(*node->init);
-
-        while (evaluate(*node->cond) != 0) {
-            execute(*node->body);
-            execute(*node->step);
-        }
+            execute(node->get_body());
+        } while (evaluate(node->get_condition()) != 0);
 
         return;
     }

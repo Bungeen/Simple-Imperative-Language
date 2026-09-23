@@ -80,17 +80,17 @@ std::string identifier(const Json& value, const std::string& path) {
     }
 
     char c = name.front();
-    bool isLetter = (c >= 'a' && c <= 'z');
-    if (!isLetter) {
+    bool is_letter = (c >= 'a' && c <= 'z');
+    if (!is_letter) {
         fail(path, "identifire can't start with no lower leter");
     }
 
     for (char c : name) {
-        bool isLetter = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-        bool isDigit = c >= '0' && c <= '9';
-        bool isSpecial = c == '_' || c == '\'';
+        bool is_letter = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        bool is_digit = c >= '0' && c <= '9';
+        bool is_special = c == '_' || c == '\'';
 
-        if (!isLetter && !isDigit && !isSpecial) {
+        if (!is_letter && !is_digit && !is_special) {
             fail(path, "invalid character in identifier");
         }
     }
@@ -212,65 +212,35 @@ StmtPtr statement(const Json& value, const std::string& path) {
         return std::make_unique<AssignStmt>(dst, std::move(src));
     }
 
-    if (tag == json_format::COMPOUND_ASSN) {
-        check_fields(body, here, {json_format::DST, json_format::BINOP, json_format::SRC});
-
-        std::string dst = identifier(body.at(json_format::DST), field_path(here, json_format::DST));
-        BinOp op = operation(body.at(json_format::BINOP), field_path(here, json_format::BINOP));
-        ExprPtr src = expression(body.at(json_format::SRC), field_path(here, json_format::SRC));
-
-        return std::make_unique<CompoundAssignStmt>(dst, op, std::move(src));
-    }
-
     if (tag == json_format::WHILE) {
         check_fields(body, here, {json_format::COND, json_format::BODY});
 
         ExprPtr cond = expression(body.at(json_format::COND), field_path(here, json_format::COND));
-        StmtPtr loopBody = statement(body.at(json_format::BODY), field_path(here, json_format::BODY));
+        StmtPtr loop_body = statement(body.at(json_format::BODY), field_path(here, json_format::BODY));
 
-        return std::make_unique<WhileStmt>(std::move(cond), std::move(loopBody));
+        return std::make_unique<WhileStmt>(std::move(cond), std::move(loop_body));
     }
 
     if (tag == json_format::DO_WHILE) {
         check_fields(body, here, {json_format::BODY, json_format::COND});
 
-        StmtPtr loopBody = statement(body.at(json_format::BODY), field_path(here, json_format::BODY));
+        StmtPtr loop_body = statement(body.at(json_format::BODY), field_path(here, json_format::BODY));
         ExprPtr cond = expression(body.at(json_format::COND), field_path(here, json_format::COND));
 
-        return std::make_unique<DoWhileStmt>(std::move(loopBody), std::move(cond));
-    }
-
-    if (tag == json_format::FOR) {
-        check_fields(body, here, {json_format::INIT, json_format::COND, json_format::STEP, json_format::BODY});
-
-        StmtPtr init = statement(body.at(json_format::INIT), field_path(here, json_format::INIT));
-        ExprPtr cond = expression(body.at(json_format::COND), field_path(here, json_format::COND));
-        StmtPtr step = statement(body.at(json_format::STEP), field_path(here, json_format::STEP));
-        StmtPtr loopBody = statement(body.at(json_format::BODY), field_path(here, json_format::BODY));
-
-        return std::make_unique<ForStmt>(
-            std::move(init),
-            std::move(cond),
-            std::move(step),
-            std::move(loopBody)
-        );
+        return std::make_unique<DoWhileStmt>(std::move(loop_body), std::move(cond));
     }
 
     if (tag == json_format::IF) {
-        check_fields(body, here, {json_format::COND, json_format::THEN}, {json_format::ELSE});
+        check_fields(body, here, {json_format::COND, json_format::THEN, json_format::ELSE});
 
         ExprPtr cond = expression(body.at(json_format::COND), field_path(here, json_format::COND));
-        StmtPtr thenBranch = statement(body.at(json_format::THEN), field_path(here, json_format::THEN));
-        StmtPtr elseBranch;
-
-        if (body.contains(json_format::ELSE)) {
-            elseBranch = statement(body.at(json_format::ELSE), field_path(here, json_format::ELSE));
-        }
+        StmtPtr then_branch = statement(body.at(json_format::THEN), field_path(here, json_format::THEN));
+        StmtPtr else_branch = statement(body.at(json_format::ELSE), field_path(here, json_format::ELSE));
 
         return std::make_unique<IfStmt>(
             std::move(cond),
-            std::move(thenBranch),
-            std::move(elseBranch)
+            std::move(then_branch),
+            std::move(else_branch)
         );
     }
 

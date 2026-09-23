@@ -1,9 +1,9 @@
 #pragma once
 
+#include <ostream>
+
 #include "stmt.h"
 #include "json_format.h"
-
-#include <ostream>
 
 
 class SkipStmt : public Stmt {

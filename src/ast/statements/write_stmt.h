@@ -1,24 +1,28 @@
 #pragma once
 
+#include <ostream>
+#include <utility>
+
 #include "stmt.h"
 #include "expression.h"
 #include "json_format.h"
 
-#include <ostream>
-#include <utility>
-
 
 class WriteStmt : public Stmt {
-private:
-    ExprPtr value;
 public:
     WriteStmt(ExprPtr value)
-        : value(std::move(value))
+        : value_(std::move(value))
     {}
+
+    const Expr& get_value() const {
+        return *value_;
+    }
 
     void show(std::ostream& os) const {
         os << "{\"" << json_format::WRITE << "\":";
-        value->show(os);
+        value_->show(os);
         os << '}';
     }
+private:
+    ExprPtr value_;
 };
