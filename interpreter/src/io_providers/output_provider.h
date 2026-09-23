@@ -5,5 +5,5 @@
 class OutputProvider {
 public:
     virtual ~OutputProvider() = default;
-    virtual void Write(std::string data) = 0;
+    virtual void write(std::string data) = 0;
 };

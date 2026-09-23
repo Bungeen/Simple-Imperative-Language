@@ -7,7 +7,7 @@
 
 class CliInputProvider : public InputProvider {
 public:
-    std::string GetInput() override {
+    std::string get_input() override {
         std::string data{};
         std::cin >> data;
 

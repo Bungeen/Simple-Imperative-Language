@@ -6,7 +6,7 @@
 
 class CliOutputProvider : public OutputProvider {
 public:
-    void Write(std::string data) override {
+    void write(std::string data) override {
         std::cout << data;
     }
 };

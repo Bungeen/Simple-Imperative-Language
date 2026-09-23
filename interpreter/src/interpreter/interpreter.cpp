@@ -48,7 +48,7 @@ void Interpreter::Visit(const AssignStmt& node) {
 
 void Interpreter::Visit(const ReadStmt& node) {
     try {
-        var_table_[node.get_variable_name()] = std::stoll(input_provider_->GetInput());
+        var_table_[node.get_variable_name()] = std::stoll(input_provider_->get_input());
     } catch (std::invalid_argument exception) {
         throw std::invalid_argument("Input is not float constant");
     } catch (std::out_of_range exception) {
@@ -57,7 +57,7 @@ void Interpreter::Visit(const ReadStmt& node) {
 }
 
 void Interpreter::Visit(const WriteStmt& node) {
-    output_provider_->Write(std::to_string(node.get_value().evaluate(*this)) + " ");
+    output_provider_->write(std::to_string(node.get_value().evaluate(*this)) + " ");
 }
 
 void Interpreter::Visit(const WhileStmt& node) {

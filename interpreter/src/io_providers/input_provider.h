@@ -5,5 +5,5 @@
 class InputProvider {
 public:
     virtual ~InputProvider() = default;
-    virtual std::string GetInput() = 0;
+    virtual std::string get_input() = 0;
 };
