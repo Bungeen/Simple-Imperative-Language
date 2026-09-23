@@ -22,7 +22,7 @@ void Interpreter::interpret(std::vector<Command> program) {
             labels[std::get<std::string>(program[i].argument)] = i;
     }
 
-    std::stack<Value> stack;
+    std::stack<Value, std::vector<Value>> stack;
     std::unordered_map<std::string, Value> variables;
 
     std::size_t pointer = 0;
