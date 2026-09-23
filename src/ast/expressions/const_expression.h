@@ -18,6 +18,10 @@ public:
         return value_;
     }
 
+    Value evaluate(Interpreter& interpreter) const override {
+        return interpreter.Visit(*this);
+    }
+
     void show(std::ostream& os) const {
         os << "{\"" << json_format::CONST << "\":" << value_ << '}';
     }

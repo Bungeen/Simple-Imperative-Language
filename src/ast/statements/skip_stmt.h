@@ -7,7 +7,12 @@
 
 
 class SkipStmt : public Stmt {
+public:
     void show(std::ostream& os) const {
         os << "{\"" << json_format::SKIP << "\":null}";
+    }
+
+    void execute(Interpreter& interpreter) const override {
+        interpreter.Visit(*this);
     }
 };

@@ -14,6 +14,10 @@ public:
         : name_(std::move(name))
     {}
 
+    Value evaluate(Interpreter& interpreter) const override {
+        return interpreter.Visit(*this);
+    }
+
     void show(std::ostream& os) const {
         os << "{\"" << json_format::VAR << "\":\"" << name_ << "\"}";
     }

@@ -1,10 +1,12 @@
-#include "ast_json.h"
-#include "interpreter.h"
-
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+
+#include "ast_json.h"
+#include "interpreter.h"
+#include "cli_input_provider.h"
+#include "cli_output_provider.h"
 
 int main(int argc, char* argv[]) {
     bool run = argc >= 2 && std::string(argv[1]) == "--run";
@@ -32,8 +34,9 @@ int main(int argc, char* argv[]) {
         }
 
         if (run) {
-            Interpreter interpreter(std::cin, std::cout);
-            interpreter.execute(*program);
+            Interpreter interpreter(std::make_unique<CliInputProvider>(), 
+                                    std::make_unique<CliOutputProvider>());
+            program->execute(interpreter);
             return 0;
         }
 

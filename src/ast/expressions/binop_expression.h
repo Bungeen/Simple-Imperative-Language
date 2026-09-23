@@ -28,6 +28,10 @@ public:
         return op_;
     }
 
+    Value evaluate(Interpreter& interpreter) const override {
+        return interpreter.Visit(*this);
+    }
+
     void show(std::ostream& os) const {
         os << "{\"" << json_format::BINOP << "\":\"" << spelling(op_) << "\",\"" << json_format::LEFT << "\":";
         lhs_->show(os);

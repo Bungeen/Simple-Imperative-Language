@@ -26,7 +26,11 @@ public:
 
     const Stmt& get_else_branch() const {
         return *else_branch_;
-    } 
+    }
+
+    void execute(Interpreter& interpreter) const override {
+        interpreter.Visit(*this);
+    }
 
     void show(std::ostream& os) const {
         os << "{\"" << json_format::IF << "\":{\"" << json_format::COND << "\":";

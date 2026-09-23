@@ -21,6 +21,10 @@ public:
     const std::string& get_variable_name() const {
         return variable_name_;
     }
+
+    void execute(Interpreter& interpreter) const override {
+        interpreter.Visit(*this);
+    }
 private:
     std::string variable_name_;
 };

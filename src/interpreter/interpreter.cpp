@@ -1,237 +1,82 @@
-#include "interpreter.h"
-
-#include <limits>
+#include <memory>
 #include <stdexcept>
 
+#include "interpreter.h"
+#include "ast.h"
 
-constexpr Value minimum = std::numeric_limits<Value>::min();
-constexpr Value maximum = std::numeric_limits<Value>::max();
-
-Value add(Value left, Value right) {
-    if ((right > 0 && left > maximum - right)
-        || (right < 0 && left < minimum - right)) {
-        throw std::runtime_error("integer overflow in +");
-    }
-
-    return left + right;
-}
-
-Value subtract(Value left, Value right) {
-    if ((right > 0 && left < minimum + right)
-        || (right < 0 && left > maximum + right)) {
-        throw std::runtime_error("integer overflow in -");
-    }
-
-    return left - right;
-}
-
-Value multiply(Value left, Value right) {
-    bool overflow = false;
-
-    if (left > 0) {
-        if (right > 0) {
-            overflow = left > maximum / right;
-        } else if (right < 0) {
-            overflow = right < minimum / left;
-        }
-    } else if (left < 0) {
-        if (right > 0) {
-            overflow = left < minimum / right;
-        } else if (right < 0) {
-            overflow = left < maximum / right;
-        }
-    }
-
-    if (overflow) {
-        throw std::runtime_error("integer overflow in *");
-    }
-
-    return left * right;
-}
-
-
-Interpreter::Interpreter(std::istream& input, std::ostream& output)
-    : input(input)
-    , output(output)
+Interpreter::Interpreter(std::unique_ptr<InputProvider> input_provider,
+                         std::unique_ptr<OutputProvider> output_provider)
+    : var_table_()
+    , input_provider_(std::move(input_provider))
+    , output_provider_(std::move(output_provider))
+    , bin_op_executor_()
 {}
 
-Value Interpreter::get_variable(const std::string& name) const {
-    auto variable = variables.find(name);
+Value Interpreter::Visit(const Var& node) {
+    if (!var_table_.contains(node.get_var_name()))
+        throw std::logic_error("Not declared variable was used\n");
 
-    if (variable == variables.end()) {
-        throw std::runtime_error("undefined variable: " + name);
-    }
-
-    return variable->second;
+    return var_table_[node.get_var_name()];
 }
 
-Value Interpreter::apply(BinOp op, Value left, const Expr& right) {
-    if (op == BinOp::Or && left != 0) {
-        return 1;
-    }
-
-    if (op == BinOp::And && left == 0) {
-        return 0;
-    }
-
-    Value rhs = evaluate(right);
-
-    switch (op) {
-        case BinOp::Or:
-        case BinOp::And:
-            return rhs != 0;
-
-        case BinOp::Equal:
-            return left == rhs;
-
-        case BinOp::NotEqual:
-            return left != rhs;
-
-        case BinOp::LessEqual:
-            return left <= rhs;
-
-        case BinOp::Less:
-            return left < rhs;
-
-        case BinOp::GreaterEqual:
-            return left >= rhs;
-
-        case BinOp::Greater:
-            return left > rhs;
-
-        case BinOp::Add:
-            return add(left, rhs);
-
-        case BinOp::Subtract:
-            return subtract(left, rhs);
-
-        case BinOp::Multiply:
-            return multiply(left, rhs);
-
-        case BinOp::Divide:
-            if (rhs == 0) {
-                throw std::runtime_error("division by zero");
-            }
-
-            if (left == minimum && rhs == -1) {
-                throw std::runtime_error("integer overflow in /");
-            }
-
-            return left / rhs;
-
-        case BinOp::Modulo:
-            if (rhs == 0) {
-                throw std::runtime_error("modulo by zero");
-            }
-
-            if (left == minimum && rhs == -1) {
-                return 0;
-            }
-
-            return left % rhs;
-    }
-
-    throw std::runtime_error("unknown binary operator");
+Value Interpreter::Visit(const Const& node) {
+    return node.get_value();
 }
 
-std::int64_t Interpreter::evaluate(const Expr& expression) {
-    if (const auto* node = dynamic_cast<const Const*>(&expression)) {
-        return node->get_value();
-    }
+Value Interpreter::Visit(const BinOpExpr& node) {
+    const Value& lhs = node.get_lhs().evaluate(*this);
+    const Value& rhs = node.get_rhs().evaluate(*this);
 
-    if (const auto* node = dynamic_cast<const Var*>(&expression)) {
-        return get_variable(node->get_var_name());
-    }
-
-    if (const auto* node = dynamic_cast<const BinOpExpr*>(&expression)) {
-        std::int64_t left = evaluate(node->get_lhs());
-
-        return apply(node->get_operation(), left, node->get_rhs());
-    }
-
-    throw std::runtime_error("unknown expression node");
+    return bin_op_executor_.ExecuteBinOp(node.get_operation(), lhs, rhs);
 }
 
-void Interpreter::execute(const Stmt& statement) {
-    if (const auto* node = dynamic_cast<const SeqStmt*>(&statement)) {
-        execute(node->get_lhs());
-        execute(node->get_rhs());
+void Interpreter::Visit(const SkipStmt& node) {
+    return;
+}
 
-        return;
+void Interpreter::Visit(const SeqStmt& node) {
+    node.get_lhs().execute(*this);
+    node.get_rhs().execute(*this);
+}
+
+void Interpreter::Visit(const AssignStmt& node) {
+    Value& dst = var_table_[node.get_dst()];
+    const Value& src = node.get_src().evaluate(*this);
+
+    dst = src;
+}
+
+void Interpreter::Visit(const ReadStmt& node) {
+    try {
+        var_table_[node.get_variable_name()] = std::stoll(input_provider_->GetInput());
+    } catch (std::invalid_argument exception) {
+        throw std::invalid_argument("Input is not float constant");
+    } catch (std::out_of_range exception) {
+        throw std::invalid_argument("Float constant from input is too big");
     }
+}
 
-    if (dynamic_cast<const SkipStmt*>(&statement)) {
-        return;
+void Interpreter::Visit(const WriteStmt& node) {
+    output_provider_->Write(std::to_string(node.get_value().evaluate(*this)) + " ");
+}
+
+void Interpreter::Visit(const WhileStmt& node) {
+    while (node.get_condition().evaluate(*this)) {
+        node.get_body().execute(*this);
     }
+}
 
-    if (const auto* node = dynamic_cast<const ReadStmt*>(&statement)) {
-        std::string token;
+void Interpreter::Visit(const DoWhileStmt& node) {
+    do {
+        node.get_body().execute(*this);
+    } while (node.get_condition().evaluate(*this));
+}
 
-        if (!(input >> token)) {
-            throw std::runtime_error("read(" + node->get_variable_name() + "): expected an integer");
-        }
-
-        std::size_t consumed = 0;
-        Value value;
-
-        try {
-            value = std::stoll(token, &consumed, 10);
-        } catch (const std::exception&) {
-            throw std::runtime_error("read(" + node->get_variable_name() + "): expected an int64 integer");
-        }
-
-        if (consumed != token.size()) {
-            throw std::runtime_error("read(" + node->get_variable_name() + "): invalid integer: " + token);
-        }
-
-        variables[node->get_variable_name()] = value;
-
-        return;
+void Interpreter::Visit(const IfStmt& node) {
+    if (node.get_condition().evaluate(*this)) {
+        node.get_then_branch().execute(*this);
     }
-
-    if (const auto* node = dynamic_cast<const WriteStmt*>(&statement)) {
-        Value value = evaluate(node->get_value());
-        output << value << '\n';
-
-        if (!output) {
-            throw std::runtime_error("write: output failed");
-        }
-
-        return;
+    else {
+        node.get_else_branch().execute(*this);
     }
-
-    if (const auto* node = dynamic_cast<const AssignStmt*>(&statement)) {
-        Value value = evaluate(node->get_src());
-        variables[node->get_dst()] = value;
-
-        return;
-    }
-
-    if (const auto* node = dynamic_cast<const IfStmt*>(&statement)) {
-        if (evaluate(node->get_condition()) != 0) {
-            execute(node->get_then_branch());
-        } else {
-            execute(node->get_else_branch());
-        }
-
-        return;
-    }
-
-    if (const auto* node = dynamic_cast<const WhileStmt*>(&statement)) {
-        while (evaluate(node->get_condition()) != 0) {
-            execute(node->get_body());
-        }
-
-        return;
-    }
-
-    if (const auto* node = dynamic_cast<const DoWhileStmt*>(&statement)) {
-        do {
-            execute(node->get_body());
-        } while (evaluate(node->get_condition()) != 0);
-
-        return;
-    }
-
-    throw std::runtime_error("unknown statement node");
 }

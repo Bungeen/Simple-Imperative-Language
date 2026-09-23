@@ -24,6 +24,10 @@ public:
         return *src_;
     }
 
+    void execute(Interpreter& interpreter) const override {
+        interpreter.Visit(*this);
+    }
+
     void show(std::ostream& os) const {
         os << "{\"" << json_format::ASSN << "\":{\"" << json_format::DST << "\":\"" << dst_ << "\",\""
         << json_format::SRC << "\":";

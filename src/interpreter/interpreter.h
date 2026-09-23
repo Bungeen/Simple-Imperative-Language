@@ -1,24 +1,43 @@
 #pragma once
 
-#include "ast.h"
+#include <memory>
 
-#include <istream>
-#include <map>
-#include <ostream>
+#include "input_provider.h"
+#include "output_provider.h"
+#include "bin_op_executor.h"
+
+class Const;
+class Var;
+class BinOpExpr;
+class SkipStmt;
+class SeqStmt;
+class AssignStmt;
+class ReadStmt;
+class WriteStmt;
+class WhileStmt;
+class DoWhileStmt;
+class IfStmt;
 
 class Interpreter {
 public:
-    Interpreter(std::istream& input, std::ostream& output);
+    Interpreter(std::unique_ptr<InputProvider> input_provider,
+                std::unique_ptr<OutputProvider> output_provider);
 
-    std::int64_t evaluate(const Expr& expression);
-    void execute(const Stmt& statement);
+    Value Visit(const Var& node);
+    Value Visit(const Const& node);
+    Value Visit(const BinOpExpr& node);
 
-    std::int64_t get_variable(const std::string& name) const;
-
+    void Visit(const SkipStmt& node);
+    void Visit(const SeqStmt& node);
+    void Visit(const AssignStmt& node);
+    void Visit(const ReadStmt& node);
+    void Visit(const WriteStmt& node);
+    void Visit(const WhileStmt& node);
+    void Visit(const DoWhileStmt& node);
+    void Visit(const IfStmt& node);
 private:
-    std::map<std::string, std::int64_t> variables;
-    std::istream& input;
-    std::ostream& output;
-
-    std::int64_t apply(BinOp op, std::int64_t left, const Expr& right);
+    std::unordered_map<std::string, Value> var_table_;
+    std::unique_ptr<InputProvider> input_provider_;
+    std::unique_ptr<OutputProvider> output_provider_;
+    BinOpExecutor bin_op_executor_;
 };

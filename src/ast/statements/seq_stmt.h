@@ -22,6 +22,10 @@ public:
         return *rhs_;
     }
 
+    void execute(Interpreter& interpreter) const override {
+        interpreter.Visit(*this);
+    }
+
     void show(std::ostream& os) const {
         os << "{\"" << json_format::SEQ << "\":{\"" << json_format::LEFT << "\":";
         lhs_->show(os);

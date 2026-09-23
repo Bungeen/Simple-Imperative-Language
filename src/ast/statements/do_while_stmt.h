@@ -23,6 +23,10 @@ public:
         return *body_;
     } 
 
+    void execute(Interpreter& interpreter) const override {
+        interpreter.Visit(*this);
+    }
+
     void show(std::ostream& os) const {
         os << "{\"" << json_format::DO_WHILE << "\":{\"" << json_format::BODY << "\":";
         body_->show(os);

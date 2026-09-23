@@ -30,7 +30,11 @@ public:
 
     const Stmt& get_body() const {
         return *body_;
-    } 
+    }
+
+    void execute(Interpreter& interpreter) const override {
+        interpreter.Visit(*this);
+    }
 private:
     ExprPtr cond_;
     StmtPtr body_;
