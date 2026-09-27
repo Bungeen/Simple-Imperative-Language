@@ -1,0 +1,4 @@
+add_subdirectory(operations)
+add_subdirectory(interpreter)
+add_subdirectory(io_providers)
+add_subdirectory(json_parser)
