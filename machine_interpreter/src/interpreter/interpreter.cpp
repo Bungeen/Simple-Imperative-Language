@@ -41,6 +41,7 @@ void Interpreter::interpret(std::vector<Command> program) {
                 break;
             case Operation::St:
                 variables[std::get<std::string>(program[pointer].argument)] = stack.top();
+                stack.pop();
                 break;
             case Operation::Const:
                 stack.push(std::get<Value>(program[pointer].argument));
