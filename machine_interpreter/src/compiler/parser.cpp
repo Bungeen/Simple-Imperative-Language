@@ -2,6 +2,7 @@
 #include "compiler_error.h"
 
 #include <charconv>
+#include <iterator>
 #include <utility>
 
 Parser::Parser(std::string_view source) 
@@ -187,14 +188,27 @@ void Parser::statement() {
     }
 
     if (accept("while")) {
-        const auto start = label();
-        const auto end = label();
-        emit(Operation::Label, start);
+        const auto body = label();
+        const auto test = label();
+
+        const auto cond_start = commands_.size();
         condition();
-        emit(Operation::Jz, end);
+        std::vector<Command> cond_cmds(
+            std::make_move_iterator(commands_.begin() + cond_start),
+            std::make_move_iterator(commands_.end())
+        );
+        commands_.erase(commands_.begin() + cond_start, commands_.end());
+
+        emit(Operation::Jmp, test);
+        emit(Operation::Label, body);
         statement();
-        emit(Operation::Jmp, start);
-        emit(Operation::Label, end);
+        emit(Operation::Label, test);
+        commands_.insert(
+            commands_.end(),
+            std::make_move_iterator(cond_cmds.begin()),
+            std::make_move_iterator(cond_cmds.end())
+        );
+        emit(Operation::Jnz, body);
         return;
     }
 
@@ -210,25 +224,45 @@ void Parser::statement() {
     }
 
     if (accept("for")) {
-        const auto check = label();
         const auto body = label();
-        const auto step = label();
-        const auto end = label();
+        const auto test = label();
+
         expect("(");
         statement();
-        emit(Operation::Label, check);
+
+        const auto cond_start = commands_.size();
         expression();
         expect(";");
-        emit(Operation::Jz, end);
-        emit(Operation::Jmp, body);
-        emit(Operation::Label, step);
+        std::vector<Command> cond_cmds(
+            std::make_move_iterator(commands_.begin() + cond_start),
+            std::make_move_iterator(commands_.end())
+        );
+        commands_.erase(commands_.begin() + cond_start, commands_.end());
+
+        const auto step_start = commands_.size();
         statement();
         expect(")");
-        emit(Operation::Jmp, check);
+        std::vector<Command> step_cmds(
+            std::make_move_iterator(commands_.begin() + step_start),
+            std::make_move_iterator(commands_.end())
+        );
+        commands_.erase(commands_.begin() + step_start, commands_.end());
+
+        emit(Operation::Jmp, test);
         emit(Operation::Label, body);
         statement();
-        emit(Operation::Jmp, step);
-        emit(Operation::Label, end);
+        commands_.insert(
+            commands_.end(),
+            std::make_move_iterator(step_cmds.begin()),
+            std::make_move_iterator(step_cmds.end())
+        );
+        emit(Operation::Label, test);
+        commands_.insert(
+            commands_.end(),
+            std::make_move_iterator(cond_cmds.begin()),
+            std::make_move_iterator(cond_cmds.end())
+        );
+        emit(Operation::Jnz, body);
         return;
     }
 
