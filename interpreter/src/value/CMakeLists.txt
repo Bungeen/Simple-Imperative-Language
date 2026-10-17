@@ -1,3 +1,2 @@
-add_library(value INTERFACE)
-target_include_directories(value INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(value STATIC value.cpp overload.h)
+target_include_directories(value PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
