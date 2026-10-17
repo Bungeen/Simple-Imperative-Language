@@ -5,9 +5,13 @@
 #include "node.h"
 
 #include "expression.h"
+#include "lvalue_expression.h"
 #include "binop_expression.h"
 #include "const_expression.h"
 #include "var_expression.h"
+#include "elem_access_expression.h"
+#include "length_expression.h"
+#include "list_expression.h"
 
 #include "stmt.h"
 #include "assign_stmt.h"

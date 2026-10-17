@@ -9,6 +9,8 @@ class BinOpExecutor {
 public:
     Value ExecuteBinOp(BinOp operation, const Value& lhs, const Value& rhs);
 private:
+    std::int64_t Compare(const Value& lhs, const Value& rhs);
+
     Value Sum(const Value& lhs, const Value& rhs) ;
     Value Sub(const Value& lhs, const Value& rhs);
     Value Mult(const Value& lhs, const Value& rhs);

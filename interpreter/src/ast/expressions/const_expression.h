@@ -6,11 +6,12 @@
 #include "expression.h"
 #include "json_format.h"
 #include "value.h"
+#include "overload.h"
 
 
 class Const : public Expr {
 public:
-    Const(std::int64_t value) 
+    Const(Value value) 
         : value_(value)
     {}
 
@@ -23,7 +24,18 @@ public:
     }
 
     void show(std::ostream& os) const {
-        os << "{\"" << json_format::CONST << "\":" << value_ << '}';
+        auto to_string = Overload(
+            [](auto value)->std::string {
+                return "inconversible to string type";
+            },
+            [](std::shared_ptr<std::string> str)->std::string {
+                return *str;
+            },
+            [](std::int64_t num)->std::string {
+                return std::to_string(num);
+            }
+        );
+        os << "{\"" << json_format::CONST << "\":" << std::visit(to_string, value_) << '}';
     }
 private:
     const Value value_;

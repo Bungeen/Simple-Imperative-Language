@@ -1,39 +1,39 @@
 #include <iostream>
 #include <fstream>
-#include <vector>
-#include <nlohmann/json.hpp>
+#include <iterator>
+#include <stdexcept>
+#include <string>
 
-#include "command.h"
-#include "program_json.h"
+#include "compiler.h"
 #include "interpreter.h"
 #include "cli_input_provider.h"
 #include "cli_output_provider.h"
 
-int main(int argc, char** argv) {
-    if (argc == 1) {
-        std::cout << "filename required" << std::endl;
-
-        return 0;
-    }
-        
-    std::ifstream fin(argv[1]);
-    
-    if (!fin.is_open()) {
-        std::cout << "Didn't managed to open specified file";
-
-        return 0;
+int main(int argc, char **argv) {
+    if (argc != 2) {
+        std::cerr << "Usage: " << argv[0] << " <source-file>" << std::endl;
+        return 1;
     }
 
-    nlohmann::json program{};
+    try {
+        std::ifstream input(argv[1]);
 
-    fin >> program;
+        if (!input) {
+            throw std::runtime_error("Cannot open input file");
+        }
 
-    std::vector<Command> parsed_program = parse(program);
+        const std::string source{std::istreambuf_iterator<char>(input),
+                                 std::istreambuf_iterator<char>()};
 
-    Interpreter interpreter(std::make_unique<CliInputProvider>(), 
-                            std::make_unique<CliOutputProvider>());
+        auto program = compile(source);
 
-    interpreter.interpret(parsed_program);
+        Interpreter interpreter(std::make_unique<CliInputProvider>(),
+                                std::make_unique<CliOutputProvider>());
 
-    return 0;
+        interpreter.interpret(std::move(program));
+        return 0;
+    } catch (const std::exception &error) {
+        std::cerr << "Error: " << error.what() << '\n';
+        return 1;
+    }
 }

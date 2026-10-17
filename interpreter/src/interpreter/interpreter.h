@@ -8,7 +8,10 @@
 
 class Const;
 class Var;
+class ElemAccess;
+class Length;
 class BinOpExpr;
+class ListExpr;
 class SkipStmt;
 class SeqStmt;
 class AssignStmt;
@@ -24,8 +27,14 @@ public:
                 std::unique_ptr<OutputProvider> output_provider);
 
     Value Visit(const Var& node);
+    Value Visit(const ElemAccess& node);
+    Value Visit(const Length& node);
     Value Visit(const Const& node);
     Value Visit(const BinOpExpr& node);
+    Value Visit(const ListExpr& node);
+
+    Value& VisitRef(const Var& node);
+    Value& VisitRef(const ElemAccess& node);
 
     void Visit(const SkipStmt& node);
     void Visit(const SeqStmt& node);
@@ -40,4 +49,6 @@ private:
     std::unique_ptr<InputProvider> input_provider_;
     std::unique_ptr<OutputProvider> output_provider_;
     BinOpExecutor bin_op_executor_;
+
+    void print_impl(const Value& to_print);
 };
