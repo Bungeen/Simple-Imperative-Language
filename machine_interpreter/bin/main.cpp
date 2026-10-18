@@ -1,8 +1,8 @@
 #include <iostream>
 #include <fstream>
-#include <iterator>
 #include <stdexcept>
 #include <string>
+#include <nlohmann/json.hpp>
 
 #include "compiler.h"
 #include "interpreter.h"
@@ -22,10 +22,10 @@ int main(int argc, char **argv) {
             throw std::runtime_error("Cannot open input file");
         }
 
-        const std::string source{std::istreambuf_iterator<char>(input),
-                                 std::istreambuf_iterator<char>()};
+        nlohmann::json program_json{};
+        input >> program_json;
 
-        auto program = compile(source);
+        auto program = compile(program_json);
 
         Interpreter interpreter(std::make_unique<CliInputProvider>(),
                                 std::make_unique<CliOutputProvider>());
