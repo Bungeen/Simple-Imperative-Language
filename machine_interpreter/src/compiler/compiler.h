@@ -1,8 +1,8 @@
 #pragma once
 
-#include <string_view>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 #include "command.h"
 
-std::vector<Command> compile(std::string_view source);
+std::vector<Command> compile(const nlohmann::json& input);
