@@ -9,6 +9,7 @@
 #include <iterator>
 #include <limits>
 
+#include <iostream>
 
 namespace ast_json {
 using Json = nlohmann::json;
@@ -131,6 +132,8 @@ BinOp operation(const Json& value, const std::string& path) {
     fail(path, "unknown binary operator: " + text);
 }
 
+LvalueExprPtr lvalue_expression(const Json& value, const std::string& path);
+
 ExprPtr expression(const Json& value, const std::string& path) {
     check_object(value, path);
 
@@ -142,12 +145,12 @@ ExprPtr expression(const Json& value, const std::string& path) {
         return std::make_unique<Const>(number);
     }
 
-    if (value.contains(json_format::VAR)) {
-        check_fields(value, path, {json_format::VAR});
+    if (value.contains(json_format::STRING)) {
+        check_fields(value, path, {json_format::STRING});
 
-        std::string name = identifier(value.at(json_format::VAR), field_path(path, json_format::VAR));
+        std::shared_ptr<std::string> string_value = std::make_shared<std::string>(value.at(json_format::STRING));
 
-        return std::make_unique<Var>(name);
+        return std::make_unique<Const>(string_value);
     }
 
     if (value.contains(json_format::BINOP)) {
@@ -160,10 +163,67 @@ ExprPtr expression(const Json& value, const std::string& path) {
         return std::make_unique<BinOpExpr>(op, std::move(left), std::move(right));
     }
 
-    fail(path, "unknown expression; expected const, var or binop");
+    if (value.contains(json_format::LENGTH)) {
+        check_fields(value, path, {json_format::LENGTH});
+
+        ExprPtr length = expression(value.at(json_format::LENGTH), field_path(path, json_format::LENGTH));
+
+        return std::make_unique<Length>(std::move(length));
+    }
+
+    if (value.contains(json_format::ARRAY)) {
+        check_fields(value, path, {json_format::ARRAY});
+
+        std::vector<ExprPtr> result{};
+
+        const Json& params = value.at(json_format::ARRAY);
+
+        for (std::size_t i = 0; i < params.size(); ++i) {
+            std::string elem_path = path + json_format::PATH_SEPARATOR + 
+                                    json_format::ARRAY +"[" + std::to_string(i) + "]";
+
+            result.push_back(expression(value.at(json_format::ARRAY)[i], elem_path));
+        }
+
+        return std::make_unique<ListExpr>(std::move(result));
+    }
+
+    try {
+        return lvalue_expression(value, path);
+    } catch(std::invalid_argument) {
+        fail(path, "unknown expression; expected const, var, elem access or binop");
+    }
+
+    throw std::logic_error("unreacheble");
+}
+
+LvalueExprPtr lvalue_expression(const Json& value, const std::string& path) {
+    check_object(value, path);
+
+    if (value.contains(json_format::VAR)) {
+        check_fields(value, path, {json_format::VAR});
+
+        std::string name = identifier(value.at(json_format::VAR), field_path(path, json_format::VAR));
+
+        return std::make_unique<Var>(name);
+    }
+
+    if (value.contains(json_format::ELEM) && value.contains(json_format::INDEX)) {
+        check_fields(value, path, {json_format::ELEM, json_format::INDEX});
+
+        ExprPtr list = expression(value.at(json_format::ELEM), field_path(path, json_format::ELEM));
+        ExprPtr index = expression(value.at(json_format::INDEX), field_path(path, json_format::INDEX));
+
+        return std::make_unique<ElemAccess>(std::move(list), std::move(index));
+    }
+
+    fail(path, "unknown expression; expected var or elem access");
 }
 
 StmtPtr statement(const Json& value, const std::string& path) {
+    if (value == json_format::SKIP)
+        return std::make_unique<SkipStmt>();
+
     check_object(value, path);
 
     if (value.size() != 1) {
@@ -206,10 +266,21 @@ StmtPtr statement(const Json& value, const std::string& path) {
     if (tag == json_format::ASSN) {
         check_fields(body, here, {json_format::DST, json_format::SRC});
 
-        std::string dst = identifier(body.at(json_format::DST), field_path(here, json_format::DST));
+        LvalueExprPtr dst = std::make_unique<Var>(body.at(json_format::DST));
         ExprPtr src = expression(body.at(json_format::SRC), field_path(here, json_format::SRC));
 
-        return std::make_unique<AssignStmt>(dst, std::move(src));
+        return std::make_unique<AssignStmt>(std::move(dst), std::move(src));
+    }
+
+    if (tag == json_format::SET) {
+        check_fields(body, here, {json_format::DST, json_format::IDX, json_format::VALUE});
+
+        ExprPtr dst = expression(body.at(json_format::DST), field_path(here, json_format::DST));
+        ExprPtr idx = expression(body.at(json_format::IDX), field_path(here, json_format::IDX));
+        LvalueExprPtr elem_access = std::make_unique<ElemAccess>(std::move(dst), std::move(idx));
+        ExprPtr value = expression(body.at(json_format::VALUE), field_path(here, json_format::VALUE));
+
+        return std::make_unique<AssignStmt>(std::move(elem_access), std::move(value));
     }
 
     if (tag == json_format::WHILE) {

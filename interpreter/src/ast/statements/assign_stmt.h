@@ -6,18 +6,19 @@
 
 #include "stmt.h"
 #include "expression.h"
+#include "lvalue_expression.h"
 #include "json_format.h"
 
 
 class AssignStmt : public Stmt {
 public:
-    AssignStmt(std::string dst, ExprPtr src)
+    AssignStmt(LvalueExprPtr dst, ExprPtr src)
         : dst_(std::move(dst))
         , src_(std::move(src))
     {}
 
-    const std::string& get_dst() const {
-        return dst_;
+    const LvalueExpr& get_dst() const {
+        return *dst_;
     }
 
     const Expr& get_src() const {
@@ -29,12 +30,13 @@ public:
     }
 
     void show(std::ostream& os) const {
-        os << "{\"" << json_format::ASSN << "\":{\"" << json_format::DST << "\":\"" << dst_ << "\",\""
-        << json_format::SRC << "\":";
+        os << "{\"" << json_format::ASSN << "\":{\"" << json_format::DST << "\":\"";
+        dst_->show(os);
+        os << "\",\"" << json_format::SRC << "\":";
         src_->show(os);
         os << "}}";
     }
 private:
-    std::string dst_;
+    LvalueExprPtr dst_;
     ExprPtr src_;
 };
