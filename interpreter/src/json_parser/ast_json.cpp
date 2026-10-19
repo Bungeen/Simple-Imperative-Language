@@ -221,6 +221,9 @@ LvalueExprPtr lvalue_expression(const Json& value, const std::string& path) {
 }
 
 StmtPtr statement(const Json& value, const std::string& path) {
+    if (value == json_format::SKIP)
+        return std::make_unique<SkipStmt>();
+
     check_object(value, path);
 
     if (value.size() != 1) {
