@@ -132,10 +132,25 @@ BinOp operation(const Json& value, const std::string& path) {
     fail(path, "unknown binary operator: " + text);
 }
 
-LvalueExprPtr lvalue_expression(const Json& value, const std::string& path);
-
 ExprPtr expression(const Json& value, const std::string& path) {
     check_object(value, path);
+
+    if (value.contains(json_format::VAR)) {
+        check_fields(value, path, {json_format::VAR});
+
+        std::string name = identifier(value.at(json_format::VAR), field_path(path, json_format::VAR));
+
+        return std::make_unique<Var>(name);
+    }
+
+    if (value.contains(json_format::ELEM) && value.contains(json_format::INDEX)) {
+        check_fields(value, path, {json_format::ELEM, json_format::INDEX});
+
+        ExprPtr list = expression(value.at(json_format::ELEM), field_path(path, json_format::ELEM));
+        ExprPtr index = expression(value.at(json_format::INDEX), field_path(path, json_format::INDEX));
+
+        return std::make_unique<ElemAccess>(std::move(list), std::move(index));
+    }
 
     if (value.contains(json_format::CONST)) {
         check_fields(value, path, {json_format::CONST});
@@ -188,36 +203,7 @@ ExprPtr expression(const Json& value, const std::string& path) {
         return std::make_unique<ListExpr>(std::move(result));
     }
 
-    try {
-        return lvalue_expression(value, path);
-    } catch(std::invalid_argument) {
-        fail(path, "unknown expression; expected const, var, elem access or binop");
-    }
-
-    throw std::logic_error("unreacheble");
-}
-
-LvalueExprPtr lvalue_expression(const Json& value, const std::string& path) {
-    check_object(value, path);
-
-    if (value.contains(json_format::VAR)) {
-        check_fields(value, path, {json_format::VAR});
-
-        std::string name = identifier(value.at(json_format::VAR), field_path(path, json_format::VAR));
-
-        return std::make_unique<Var>(name);
-    }
-
-    if (value.contains(json_format::ELEM) && value.contains(json_format::INDEX)) {
-        check_fields(value, path, {json_format::ELEM, json_format::INDEX});
-
-        ExprPtr list = expression(value.at(json_format::ELEM), field_path(path, json_format::ELEM));
-        ExprPtr index = expression(value.at(json_format::INDEX), field_path(path, json_format::INDEX));
-
-        return std::make_unique<ElemAccess>(std::move(list), std::move(index));
-    }
-
-    fail(path, "unknown expression; expected var or elem access");
+    fail(path, "unknown expression; expected var, elem access, const, var, elem access or binop");
 }
 
 StmtPtr statement(const Json& value, const std::string& path) {
@@ -266,10 +252,10 @@ StmtPtr statement(const Json& value, const std::string& path) {
     if (tag == json_format::ASSN) {
         check_fields(body, here, {json_format::DST, json_format::SRC});
 
-        LvalueExprPtr dst = std::make_unique<Var>(body.at(json_format::DST));
+        std::string dst_name = body.at(json_format::DST);
         ExprPtr src = expression(body.at(json_format::SRC), field_path(here, json_format::SRC));
 
-        return std::make_unique<AssignStmt>(std::move(dst), std::move(src));
+        return std::make_unique<AssignStmt>(std::move(dst_name), std::move(src));
     }
 
     if (tag == json_format::SET) {
@@ -277,10 +263,9 @@ StmtPtr statement(const Json& value, const std::string& path) {
 
         ExprPtr dst = expression(body.at(json_format::DST), field_path(here, json_format::DST));
         ExprPtr idx = expression(body.at(json_format::IDX), field_path(here, json_format::IDX));
-        LvalueExprPtr elem_access = std::make_unique<ElemAccess>(std::move(dst), std::move(idx));
         ExprPtr value = expression(body.at(json_format::VALUE), field_path(here, json_format::VALUE));
 
-        return std::make_unique<AssignStmt>(std::move(elem_access), std::move(value));
+        return std::make_unique<AssignElemStmt>(std::move(dst), std::move(idx), std::move(value));
     }
 
     if (tag == json_format::WHILE) {

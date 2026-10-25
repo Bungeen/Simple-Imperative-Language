@@ -15,6 +15,7 @@ class ListExpr;
 class SkipStmt;
 class SeqStmt;
 class AssignStmt;
+class AssignElemStmt;
 class ReadStmt;
 class WriteStmt;
 class WhileStmt;
@@ -33,12 +34,10 @@ public:
     Value Visit(const BinOpExpr& node);
     Value Visit(const ListExpr& node);
 
-    Value& VisitRef(const Var& node);
-    Value& VisitRef(const ElemAccess& node);
-
     void Visit(const SkipStmt& node);
     void Visit(const SeqStmt& node);
     void Visit(const AssignStmt& node);
+    void Visit(const AssignElemStmt& node);
     void Visit(const ReadStmt& node);
     void Visit(const WriteStmt& node);
     void Visit(const WhileStmt& node);

@@ -5,11 +5,10 @@
 #include <utility>
 
 #include "expression.h"
-#include "lvalue_expression.h"
 #include "json_format.h"
 
 
-class ElemAccess : public LvalueExpr {
+class ElemAccess : public Expr {
 public:
     ElemAccess(ExprPtr list, ExprPtr selector) 
         : list_(std::move(list))
@@ -18,10 +17,6 @@ public:
 
     Value evaluate(Interpreter& interpreter) const override {
         return interpreter.Visit(*this);
-    }
-
-    Value& evaluate_ref(Interpreter& interpreter) const override {
-        return interpreter.VisitRef(*this);
     }
 
     void show(std::ostream& os) const {

@@ -5,11 +5,10 @@
 #include <utility>
 
 #include "expression.h"
-#include "lvalue_expression.h"
 #include "json_format.h"
 
 
-class Var : public LvalueExpr {
+class Var : public Expr {
 public:
     Var(std::string name) 
         : name_(std::move(name))
@@ -17,10 +16,6 @@ public:
 
     Value evaluate(Interpreter& interpreter) const override {
         return interpreter.Visit(*this);
-    }
-
-    Value& evaluate_ref(Interpreter& interpreter) const override {
-        return interpreter.VisitRef(*this);
     }
 
     void show(std::ostream& os) const {

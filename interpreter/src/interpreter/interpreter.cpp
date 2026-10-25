@@ -1,5 +1,6 @@
 #include <memory>
 #include <stdexcept>
+#include <limits>
 
 #include "interpreter.h"
 #include "ast.h"
@@ -40,7 +41,7 @@ Value Interpreter::Visit(const ElemAccess& node) {
                 pos = str->size() + pos;
             if (pos < 0 || static_cast<size_t>(pos) >= str->size())
                 throw std::out_of_range("string index out of range");
-            return std::make_shared<std::string>(1, str->at(static_cast<size_t>(pos)));
+            return static_cast<std::int64_t>(1, str->at(static_cast<size_t>(pos)));
         }
     };
 
@@ -78,33 +79,6 @@ Value Interpreter::Visit(const ListExpr& node) {
     return result;
 }
 
-Value& Interpreter::VisitRef(const Var& node) {
-    return var_table_[node.get_var_name()];
-}
-
-Value& Interpreter::VisitRef(const ElemAccess& node) {
-    const Value& list = node.get_list().evaluate(*this);
-    const Value& selector = node.get_selector().evaluate(*this);
-
-    auto value_access = Overload{
-        [](auto arg1, auto arg2)->Value& {
-            throw std::logic_error("Invalid types for element access");
-        },
-        [](const std::shared_ptr<List>& list, std::int64_t pos)->Value& {
-            if (list.use_count() == 1)
-                throw std::logic_error("rvalue list elem can't be used for assignment");
-            if (pos < 0)
-                pos = list->size() + pos;
-            if (pos < 0 || static_cast<size_t>(pos) >= list->size())
-                throw std::out_of_range("list index out of range");
-
-            return list->at(static_cast<size_t>(pos));
-        }
-    };
-
-    return std::visit(value_access, list, selector);
-}
-
 Value Interpreter::Visit(const BinOpExpr& node) {
     const Value& lhs = node.get_lhs().evaluate(*this);
     const Value& rhs = node.get_rhs().evaluate(*this);
@@ -122,10 +96,43 @@ void Interpreter::Visit(const SeqStmt& node) {
 }
 
 void Interpreter::Visit(const AssignStmt& node) {
-    Value& dst = node.get_dst().evaluate_ref(*this);
+    
     const Value& src = node.get_src().evaluate(*this);
 
-    dst = src;
+    var_table_[node.get_dst_name()] = src;
+}
+
+void Interpreter::Visit(const AssignElemStmt& node) {
+    
+    const Value& src = node.get_src().evaluate(*this);
+    const Value& dst = node.get_dst().evaluate(*this);
+    const Value& idx = node.get_idx().evaluate(*this);
+    
+    auto assign = Overload{
+        [](auto arg1, auto arg2, auto arg3) {
+            throw std::logic_error("Invalid types for element assignment");
+        },
+        [](const std::shared_ptr<List>& list, std::int64_t pos, auto value) {
+            if (pos < 0)
+                pos = list->size() + pos;
+            if (pos < 0 || static_cast<size_t>(pos) >= list->size())
+                throw std::out_of_range("list index out of range");
+
+            list->at(pos) = value;
+        },
+        [](const std::shared_ptr<std::string>& str, std::int64_t pos, std::int64_t value) {
+            if (pos < 0)
+                pos = str->size() + pos;
+            if (pos < 0 || static_cast<size_t>(pos) >= str->size())
+                throw std::out_of_range("string index out of range");
+            if ((value > std::numeric_limits<char>::max()) || (value < std::numeric_limits<char>::min()))
+                throw std::out_of_range("can not assign to char integer not from char limits");
+                
+            str->at(pos) = static_cast<char>(value);
+        }
+    };
+
+    std::visit(assign, dst, idx, src);
 }
 
 void Interpreter::Visit(const ReadStmt& node) {

@@ -5,7 +5,6 @@
 #include "node.h"
 
 #include "expression.h"
-#include "lvalue_expression.h"
 #include "binop_expression.h"
 #include "const_expression.h"
 #include "var_expression.h"
@@ -15,6 +14,7 @@
 
 #include "stmt.h"
 #include "assign_stmt.h"
+#include "assign_elem_stmt.h"
 #include "do_while_stmt.h"
 #include "if_stmt.h"
 #include "read_stmt.h"
