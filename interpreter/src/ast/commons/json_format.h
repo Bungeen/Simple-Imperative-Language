@@ -4,7 +4,14 @@
 
 namespace json_format {
 inline const std::string CONST = "const";
+inline const std::string STRING = "string";
 inline const std::string VAR = "var";
+inline const std::string ELEM = "elem";
+inline const std::string INDEX = "index";
+inline const std::string LENGTH = "length";
+inline const std::string SEXP = "sexp";
+inline const std::string ARGS = "args";
+inline const std::string ARRAY = "array";
 inline const std::string BINOP = "binop";
 inline const std::string LEFT = "left";
 inline const std::string RIGHT = "right";
@@ -13,8 +20,11 @@ inline const std::string WRITE = "write";
 inline const std::string SKIP = "skip";
 inline const std::string SEQ = "seq";
 inline const std::string ASSN = "assn";
+inline const std::string SET = "set";
+inline const std::string IDX = "idx";
+inline const std::string VALUE = "value";
 inline const std::string WHILE = "while";
-inline const std::string DO_WHILE = "do_while";
+inline const std::string DO_WHILE = "do";
 inline const std::string IF = "if";
 inline const std::string DST = "dst";
 inline const std::string SRC = "src";

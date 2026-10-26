@@ -1,19 +1,22 @@
 #pragma once
 
 #include <unordered_map>
+#include <cstdint>
 
 #include "bin_op.h"
 #include "command.h"
+#include "value.h"
 
 class BinOpExecutor {
 public:
     Value ExecuteBinOp(BinOp operation, const Value& lhs, const Value& rhs);
 private:
-    Value Sum(const Value& lhs, const Value& rhs) ;
+    Value Sum(const Value& lhs, const Value& rhs);
     Value Sub(const Value& lhs, const Value& rhs);
     Value Mult(const Value& lhs, const Value& rhs);
     Value Div(const Value& lhs, const Value& rhs);
     Value Remainder(const Value& lhs, const Value& rhs);
+    std::int64_t Compare(const Value& lhs, const Value& rhs);
     Value Equal(const Value& lhs, const Value& rhs);
     Value NotEqual(const Value& lhs, const Value& rhs);
     Value Less(const Value& lhs, const Value& rhs);

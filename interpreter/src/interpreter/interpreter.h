@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <string_view>
 
 #include "input_provider.h"
 #include "output_provider.h"
@@ -8,10 +9,15 @@
 
 class Const;
 class Var;
+class ElemAccess;
+class Length;
 class BinOpExpr;
+class ListExpr;
+class SexpExpr;
 class SkipStmt;
 class SeqStmt;
 class AssignStmt;
+class AssignElemStmt;
 class ReadStmt;
 class WriteStmt;
 class WhileStmt;
@@ -24,12 +30,17 @@ public:
                 std::unique_ptr<OutputProvider> output_provider);
 
     Value Visit(const Var& node);
+    Value Visit(const ElemAccess& node);
+    Value Visit(const Length& node);
     Value Visit(const Const& node);
     Value Visit(const BinOpExpr& node);
+    Value Visit(const ListExpr& node);
+    Value Visit(const SexpExpr& node);
 
     void Visit(const SkipStmt& node);
     void Visit(const SeqStmt& node);
     void Visit(const AssignStmt& node);
+    void Visit(const AssignElemStmt& node);
     void Visit(const ReadStmt& node);
     void Visit(const WriteStmt& node);
     void Visit(const WhileStmt& node);
@@ -40,4 +51,15 @@ private:
     std::unique_ptr<InputProvider> input_provider_;
     std::unique_ptr<OutputProvider> output_provider_;
     BinOpExecutor bin_op_executor_;
+
+    void print_impl(const Value& to_print);
+    std::pair<Value, std::string_view> parse_impl(std::string_view input);
+    std::pair<Value, std::string_view> parse_array(std::string_view input);
+    std::pair<Value, std::string_view> parse_sexp_simple(std::string_view input);
+    std::pair<Value, std::string_view> parse_sexp(std::string_view input);
+    std::pair<Value, std::string_view> parse_num(std::string_view input);
+    std::pair<Value, std::string_view> parse_string(std::string_view input);
+    std::pair<Value, std::string_view> parse_char(std::string_view input);
+    std::pair<List, std::string_view> parse_values(std::string_view input, char stop);
+    std::string_view trim(std::string_view input);
 };
