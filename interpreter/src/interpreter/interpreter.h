@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <string_view>
 
 #include "input_provider.h"
 #include "output_provider.h"
@@ -50,4 +51,10 @@ private:
     BinOpExecutor bin_op_executor_;
 
     void print_impl(const Value& to_print);
+    std::pair<Value, std::string_view> parse_impl(std::string_view input);
+    std::pair<Value, std::string_view> parse_array(std::string_view input);
+    std::pair<Value, std::string_view> parse_num(std::string_view input);
+    std::pair<Value, std::string_view> parse_string(std::string_view input);
+    std::pair<Value, std::string_view> parse_char(std::string_view input);
+    std::string_view trim(std::string_view input);
 };

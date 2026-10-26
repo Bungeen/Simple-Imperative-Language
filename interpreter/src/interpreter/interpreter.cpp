@@ -1,6 +1,9 @@
 #include <memory>
 #include <stdexcept>
 #include <limits>
+#include <string_view>
+#include <ranges>
+#include <charconv>
 
 #include "interpreter.h"
 #include "ast.h"
@@ -127,7 +130,7 @@ void Interpreter::Visit(const AssignElemStmt& node) {
                 throw std::out_of_range("string index out of range");
             if ((value > std::numeric_limits<char>::max()) || (value < std::numeric_limits<char>::min()))
                 throw std::out_of_range("can not assign to char integer not from char limits");
-                
+
             str->at(pos) = static_cast<char>(value);
         }
     };
@@ -135,14 +138,102 @@ void Interpreter::Visit(const AssignElemStmt& node) {
     std::visit(assign, dst, idx, src);
 }
 
-void Interpreter::Visit(const ReadStmt& node) {
-    try {
-        var_table_[node.get_variable_name()] = std::make_shared<std::string>(input_provider_->get_input());
-    } catch (std::invalid_argument exception) {
-        throw std::invalid_argument("Input is not float constant");
-    } catch (std::out_of_range exception) {
-        throw std::invalid_argument("Float constant from input is too big");
+std::string_view Interpreter::trim(std::string_view input) {
+    if (input.empty())
+        return input;
+
+    std::size_t left_bound = input.find_first_not_of(" \t\n\r\v\f");
+    std::size_t right_bound = input.find_last_not_of(" \t\n\r\v\f");
+
+    return input.substr(left_bound, right_bound - left_bound + 1);
+}
+
+std::pair<Value, std::string_view> Interpreter::parse_num(std::string_view input) {
+    std::int64_t value;
+
+     auto [ptr, ec] = std::from_chars(input.data(), input.data() + input.size(), value);
+
+     if (ec != std::errc())
+        throw std::invalid_argument("invalid input");
+
+    std::string_view rest = trim(std::string_view(ptr, input.data() + input.size()));
+
+    return std::pair(value, rest);
+}
+
+std::pair<Value, std::string_view> Interpreter::parse_string(std::string_view input) {
+    std::string_view rest = input.substr(1, input.size() - 1);
+
+    std::size_t str_end = rest.find("\"");
+
+    if (str_end == rest.size())
+        throw std::invalid_argument("invalid input");
+
+    Value result = std::make_shared<std::string>(rest.substr(0, str_end));
+
+    rest = rest.substr(str_end + 1, rest.size() - str_end - 1);
+
+    return std::pair(result, rest);
+}
+
+std::pair<Value, std::string_view> Interpreter::parse_char(std::string_view input) {
+    if ((input.size() < 3) || input[2] != '\'')
+        throw std::invalid_argument("invalid input");
+
+    std::int64_t result = input[1];
+    std::string_view rest = input.substr(3, input.size() - 3);
+
+    return std::pair(result, rest);
+}
+
+std::pair<Value, std::string_view> Interpreter::parse_array(std::string_view input) {
+    std::vector<Value> result;
+
+    std::string_view rest = trim(input.substr(1, input.size() - 1));
+
+    while (rest[0] != ']') {
+        auto [value, next_rest] = parse_impl(rest);
+
+        result.push_back(value);
+
+        rest = trim(next_rest);
+
+        if (rest.empty() || ((rest[0] != ']') && (rest[0] != ',')))
+            throw std::invalid_argument("invalid input");
+
+        if (rest[0] == ',')
+            rest = trim(rest.substr(1, rest.size() - 1));
     }
+
+    rest = rest.substr(1, rest.size() - 1);
+
+    return std::pair(std::make_shared<List>(std::move(result)), rest);
+}
+
+std::pair<Value, std::string_view> Interpreter::parse_impl(std::string_view input) {
+    if (input.empty())
+        throw std::invalid_argument("invalid input");
+
+    input = trim(input);
+
+    if (input.front() == '[')
+        return parse_array(input);
+    else if (input.front() == '\"') 
+        return parse_string(input);
+    else if (input.front() == '\'')
+        return parse_char(input);
+    else
+        return parse_num(input);
+}
+
+void Interpreter::Visit(const ReadStmt& node) {
+    auto [value, rest] = parse_impl(input_provider_->get_input());
+
+    if (!rest.empty()) {
+        throw std::invalid_argument("invalid input");
+    }
+
+    var_table_[node.get_variable_name()] = value;
 }
 
 void Interpreter::print_impl(const Value& to_print) {
