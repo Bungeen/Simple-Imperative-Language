@@ -143,6 +143,15 @@ static void compile_expression(const nlohmann::json& value, const std::string& p
         return;
     }
 
+    if (value.contains("string")) {
+        check_fields(value, path, {"string"});
+        if (!value.at("string").is_string()) {
+            fail(field_path(path, "string"), "expected a string");
+        }
+        commands.push_back(Command{Operation::String, value.at("string").get<std::string>()});
+        return;
+    }
+
     if (value.contains("var")) {
         check_fields(value, path, {"var"});
         std::string name = identifier(value.at("var"), field_path(path, "var"));
@@ -159,11 +168,60 @@ static void compile_expression(const nlohmann::json& value, const std::string& p
         return;
     }
 
-    fail(path, "unknown expression; expected const, var or binop");
+    if (value.contains("length")) {
+        check_fields(value, path, {"length"});
+        compile_expression(value.at("length"), field_path(path, "length"), commands);
+        commands.push_back(Command{Operation::Length});
+        return;
+    }
+
+    if (value.contains("elem")) {
+        check_fields(value, path, {"elem", "index"});
+        compile_expression(value.at("elem"), field_path(path, "elem"), commands);
+        compile_expression(value.at("index"), field_path(path, "index"), commands);
+        commands.push_back(Command{Operation::Elem});
+        return;
+    }
+
+    if (value.contains("array")) {
+        check_fields(value, path, {"array"});
+        const auto& arr = value.at("array");
+        if (!arr.is_array()) {
+            fail(field_path(path, "array"), "expected an array");
+        }
+        for (std::size_t i = 0; i < arr.size(); ++i) {
+            compile_expression(arr[i], field_path(path, "array[" + std::to_string(i) + "]"), commands);
+        }
+        commands.push_back(Command{Operation::Array, static_cast<std::int64_t>(arr.size())});
+        return;
+    }
+
+    if (value.contains("sexp")) {
+        check_fields(value, path, {"sexp", "args"});
+        if (!value.at("sexp").is_string()) {
+            fail(field_path(path, "sexp"), "expected a sexp tag string");
+        }
+        std::string tag = value.at("sexp").get<std::string>();
+        const auto& args = value.at("args");
+        if (!args.is_array()) {
+            fail(field_path(path, "args"), "expected an array of arguments");
+        }
+        for (std::size_t i = 0; i < args.size(); ++i) {
+            compile_expression(args[i], field_path(path, "args[" + std::to_string(i) + "]"), commands);
+        }
+        commands.push_back(Command{Operation::Sexp, SexpArg{std::move(tag), static_cast<std::int64_t>(args.size())}});
+        return;
+    }
+
+    fail(path, "unknown expression; expected const, string, var, binop, length, elem, array or sexp");
 }
 
 static void compile_statement(const nlohmann::json& value, const std::string& path,
                               std::vector<Command>& commands, std::size_t& next_label) {
+    if (value.is_string() && value.get<std::string>() == "skip") {
+        return;
+    }
+
     check_object(value, path);
 
     if (value.size() != 1) {
@@ -176,14 +234,14 @@ static void compile_statement(const nlohmann::json& value, const std::string& pa
 
     if (tag == "read") {
         std::string name = identifier(body, here);
-        commands.push_back(Command{Operation::Read, CommandArgument()});
+        commands.push_back(Command{Operation::Read});
         commands.push_back(Command{Operation::St, name});
         return;
     }
 
     if (tag == "write") {
         compile_expression(body, here, commands);
-        commands.push_back(Command{Operation::Write, CommandArgument()});
+        commands.push_back(Command{Operation::Write});
         return;
     }
 
@@ -209,6 +267,15 @@ static void compile_statement(const nlohmann::json& value, const std::string& pa
         return;
     }
 
+    if (tag == "set") {
+        check_fields(body, here, {"dst", "idx", "value"});
+        compile_expression(body.at("dst"), field_path(here, "dst"), commands);
+        compile_expression(body.at("idx"), field_path(here, "idx"), commands);
+        compile_expression(body.at("value"), field_path(here, "value"), commands);
+        commands.push_back(Command{Operation::Set});
+        return;
+    }
+
     if (tag == "while") {
         check_fields(body, here, {"cond", "body"});
 
@@ -224,7 +291,7 @@ static void compile_statement(const nlohmann::json& value, const std::string& pa
         return;
     }
 
-    if (tag == "do_while") {
+    if (tag == "do_while" || tag == "do") {
         check_fields(body, here, {"body", "cond"});
 
         std::string start_lbl = "L_" + std::to_string(next_label++);
