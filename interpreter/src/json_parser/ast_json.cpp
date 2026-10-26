@@ -168,6 +168,24 @@ ExprPtr expression(const Json& value, const std::string& path) {
         return std::make_unique<Const>(string_value);
     }
 
+    if (value.contains(json_format::SEXP) && value.contains(json_format::ARGS)) {
+        check_fields(value, path, {json_format::SEXP, json_format::ARGS});
+
+        std::string tag = value.at(json_format::SEXP);
+        std::vector<ExprPtr> args{};
+
+        const Json& params = value.at(json_format::ARGS);
+
+        for (std::size_t i = 0; i < params.size(); ++i) {
+            std::string elem_path = path + json_format::PATH_SEPARATOR + 
+                                    json_format::ARGS +"[" + std::to_string(i) + "]";
+
+            args.push_back(expression(value.at(json_format::ARGS)[i], elem_path));
+        }
+
+        return std::make_unique<SexpExpr>(std::move(tag), std::move(args));
+    }
+
     if (value.contains(json_format::BINOP)) {
         check_fields(value, path, {json_format::BINOP, json_format::LEFT, json_format::RIGHT});
 

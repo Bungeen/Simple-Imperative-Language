@@ -13,6 +13,7 @@ class ElemAccess;
 class Length;
 class BinOpExpr;
 class ListExpr;
+class SexpExpr;
 class SkipStmt;
 class SeqStmt;
 class AssignStmt;
@@ -34,6 +35,7 @@ public:
     Value Visit(const Const& node);
     Value Visit(const BinOpExpr& node);
     Value Visit(const ListExpr& node);
+    Value Visit(const SexpExpr& node);
 
     void Visit(const SkipStmt& node);
     void Visit(const SeqStmt& node);
@@ -53,8 +55,11 @@ private:
     void print_impl(const Value& to_print);
     std::pair<Value, std::string_view> parse_impl(std::string_view input);
     std::pair<Value, std::string_view> parse_array(std::string_view input);
+    std::pair<Value, std::string_view> parse_sexp_simple(std::string_view input);
+    std::pair<Value, std::string_view> parse_sexp(std::string_view input);
     std::pair<Value, std::string_view> parse_num(std::string_view input);
     std::pair<Value, std::string_view> parse_string(std::string_view input);
     std::pair<Value, std::string_view> parse_char(std::string_view input);
+    std::pair<List, std::string_view> parse_values(std::string_view input, char stop);
     std::string_view trim(std::string_view input);
 };

@@ -39,6 +39,13 @@ Value Interpreter::Visit(const ElemAccess& node) {
                 throw std::out_of_range("list index out of range");
             return list->at(static_cast<size_t>(pos));
         },
+        [](const std::shared_ptr<Sexp>& sexp, std::int64_t pos)->Value {
+            if (pos < 0)
+                pos = sexp->values.size() + pos;
+            if (pos < 0 || static_cast<size_t>(pos) >= sexp->values.size())
+                throw std::out_of_range("list index out of range");
+            return sexp->values.at(static_cast<size_t>(pos));
+        },
         [](const std::shared_ptr<std::string>& str, std::int64_t pos)->Value {
             if (pos < 0)
                 pos = str->size() + pos;
@@ -60,6 +67,9 @@ Value Interpreter::Visit(const Length& node) {
         },
         [](const std::shared_ptr<List>& list)->Value {
             return static_cast<std::int64_t>(list->size());
+        },
+        [](const std::shared_ptr<Sexp>& sexp)->Value {
+            return static_cast<std::int64_t>(sexp->values.size());
         }
     };
 
@@ -80,6 +90,19 @@ Value Interpreter::Visit(const ListExpr& node) {
     }
 
     return result;
+}
+
+Value Interpreter::Visit(const SexpExpr& node) {
+    const std::vector<ExprPtr>& params = node.get_params();
+    const std::string& tag = node.get_tag();
+
+    List result{};
+
+    for (const auto& param : params) {
+        result.push_back(param->evaluate(*this));
+    }
+
+    return std::make_shared<Sexp>(tag, result);
 }
 
 Value Interpreter::Visit(const BinOpExpr& node) {
@@ -132,6 +155,14 @@ void Interpreter::Visit(const AssignElemStmt& node) {
                 throw std::out_of_range("can not assign to char integer not from char limits");
 
             str->at(pos) = static_cast<char>(value);
+        },
+        [](const std::shared_ptr<Sexp>& sexp, std::int64_t pos, auto value) {
+            if (pos < 0)
+                pos = sexp->values.size() + pos;
+            if (pos < 0 || static_cast<size_t>(pos) >= sexp->values.size())
+                throw std::out_of_range("string index out of range");
+
+            sexp->values.at(pos) = value;
         }
     };
 
@@ -186,19 +217,19 @@ std::pair<Value, std::string_view> Interpreter::parse_char(std::string_view inpu
     return std::pair(result, rest);
 }
 
-std::pair<Value, std::string_view> Interpreter::parse_array(std::string_view input) {
-    std::vector<Value> result;
+std::pair<List, std::string_view>  Interpreter::parse_values(std::string_view input, char stop){
+    List result;
 
     std::string_view rest = trim(input.substr(1, input.size() - 1));
 
-    while (rest[0] != ']') {
+    while (rest[0] != stop) {
         auto [value, next_rest] = parse_impl(rest);
 
         result.push_back(value);
 
         rest = trim(next_rest);
 
-        if (rest.empty() || ((rest[0] != ']') && (rest[0] != ',')))
+        if (rest.empty() || ((rest[0] != stop) && (rest[0] != ',')))
             throw std::invalid_argument("invalid input");
 
         if (rest[0] == ',')
@@ -207,7 +238,38 @@ std::pair<Value, std::string_view> Interpreter::parse_array(std::string_view inp
 
     rest = rest.substr(1, rest.size() - 1);
 
+    return std::pair(std::move(result), rest);
+}
+
+std::pair<Value, std::string_view> Interpreter::parse_array(std::string_view input) {
+    auto [result, rest] = parse_values(input, ']');
+
     return std::pair(std::make_shared<List>(std::move(result)), rest);
+}
+
+std::pair<Value, std::string_view> Interpreter::parse_sexp_simple(std::string_view input) {
+    auto [result, rest] = parse_values(input, '}');
+
+    return std::pair(std::make_shared<Sexp>("cons", std::move(result)), rest);
+}
+
+std::pair<Value, std::string_view> Interpreter::parse_sexp(std::string_view input) {
+    std::string tag;
+
+    while (((input.front() >= 'A') && (input.front() <= 'Z')) || 
+           ((input.front() >= 'a') && (input.front() <= 'z'))) {
+        tag += input.front();
+        input = input.substr(1, input.size() - 1);
+    }
+
+    input = trim(input);
+
+    if (input.front() != '(')
+        throw std::invalid_argument("invalid input");
+
+    auto [values, rest] = parse_values(input, ')');
+
+    return std::pair(std::make_shared<Sexp>(tag, std::move(values)), rest);
 }
 
 std::pair<Value, std::string_view> Interpreter::parse_impl(std::string_view input) {
@@ -218,6 +280,10 @@ std::pair<Value, std::string_view> Interpreter::parse_impl(std::string_view inpu
 
     if (input.front() == '[')
         return parse_array(input);
+    else if ((input.front() >= 'A') && (input.front() <= 'Z'))
+        return parse_sexp(input);
+    else if (input.front() == '{')
+        return parse_sexp_simple(input);
     else if (input.front() == '\"') 
         return parse_string(input);
     else if (input.front() == '\'')
@@ -249,6 +315,19 @@ void Interpreter::print_impl(const Value& to_print) {
             output_provider_->write("[");
             bool is_first = true;
             for(const auto& elem : *list) {
+                if (!is_first)
+                    output_provider_->write(", ");
+                else
+                    is_first = false;
+                print_impl(elem);
+            }
+            output_provider_->write("] ");
+        },
+        [this](const std::shared_ptr<Sexp>& sexp) {
+            output_provider_->write(sexp->tag);
+            output_provider_->write(": [");
+            bool is_first = true;
+            for(const auto& elem : sexp->values) {
                 if (!is_first)
                     output_provider_->write(", ");
                 else

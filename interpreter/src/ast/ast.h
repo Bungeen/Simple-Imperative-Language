@@ -11,6 +11,7 @@
 #include "elem_access_expression.h"
 #include "length_expression.h"
 #include "list_expression.h"
+#include "sexp_expression.h"
 
 #include "stmt.h"
 #include "assign_stmt.h"
