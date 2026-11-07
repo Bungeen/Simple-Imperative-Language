@@ -34,6 +34,14 @@ inline const std::string INIT = "init";
 inline const std::string STEP = "step";
 inline const std::string THEN = "then";
 inline const std::string ELSE = "else";
+inline const std::string SWITCH = "switch";
+inline const std::string SCRUTINEE = "scrutinee";
+inline const std::string BRANCHES = "branches";
+inline const std::string BRANCH = "branch";
+inline const std::string PATTERN = "pattern";
+inline const std::string BIND = "bind";
+inline const std::string NAME = "name";
+inline const std::string WILDCARD = "wildcard";
 
 inline const std::string ROOT_PATH = "$";
 inline const std::string PATH_SEPARATOR = ".";
