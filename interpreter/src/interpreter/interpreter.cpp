@@ -11,17 +11,14 @@
 
 Interpreter::Interpreter(std::unique_ptr<InputProvider> input_provider,
                          std::unique_ptr<OutputProvider> output_provider)
-    : var_table_()
+    : calls_stack_()
     , input_provider_(std::move(input_provider))
     , output_provider_(std::move(output_provider))
     , bin_op_executor_()
 {}
 
 Value Interpreter::Visit(const Var& node) {
-    if (!var_table_.contains(node.get_var_name()))
-        throw std::logic_error("Not declared variable was used\n");
-
-    return var_table_[node.get_var_name()];
+    return calls_stack_.Get(node.get_var_name());
 }
 
 Value Interpreter::Visit(const ElemAccess& node) {
@@ -125,7 +122,7 @@ void Interpreter::Visit(const AssignStmt& node) {
     
     const Value& src = node.get_src().evaluate(*this);
 
-    var_table_[node.get_dst_name()] = src;
+    calls_stack_.SetValueForFunction(node.get_dst_name(), src);
 }
 
 void Interpreter::Visit(const AssignElemStmt& node) {
@@ -299,7 +296,7 @@ void Interpreter::Visit(const ReadStmt& node) {
         throw std::invalid_argument("invalid input");
     }
 
-    var_table_[node.get_variable_name()] = value;
+    calls_stack_.SetValueForFunction(node.get_variable_name(), value);
 }
 
 void Interpreter::print_impl(const Value& to_print) {
@@ -370,4 +367,127 @@ void Interpreter::Visit(const IfStmt& node) {
     else {
         node.get_else_branch().execute(*this);
     }
+}
+
+void Interpreter::Visit(const SwitchStmt& node) {
+    const Value& value = node.get_value().evaluate(*this);
+    calls_stack_.AddScope();
+
+    for (auto& [pattern, branch] : node.get_cases()) {
+        if (pattern->check(*this, value)) {
+            branch->execute(*this);
+            calls_stack_.RemoveScope();
+            return;
+        }
+    }
+
+    throw std::logic_error("no match found");
+}
+
+bool Interpreter::Visit(const ArrayPattern& node, const Value& value) {
+    const std::vector<PatternPtr>& patterns = node.get_patterns();
+
+    auto check_patterns = Overload{
+        [](auto arg1)->bool {
+            return false;
+        },
+        [&](const std::shared_ptr<List>& list)->bool {
+            if (patterns.size() != list->size())
+                return false;
+
+            for (std::size_t i = 0; i < patterns.size(); ++i) {
+                if (!patterns[i]->check(*this, list->at(i)))
+                    return false;
+            }
+
+            return true;
+        }
+    };
+
+    return std::visit(check_patterns, value);
+}
+
+bool Interpreter::Visit(const BindPattern& node, const Value& value) {
+    const std::string& target = node.get_var_name();
+
+    if (!node.get_pattern().check(*this, value))
+        return false;
+
+    calls_stack_.SetValueForScope(target, value);
+
+    return true;
+}
+
+bool Interpreter::Visit(const IntPattern& node, const Value& value) {
+    const std::int64_t& target = node.get_value();
+
+    auto check_string = Overload{
+        [](auto arg1)->bool {
+            return false;
+        },
+        [&target](const std::int64_t& value)->bool {
+            return target == value;
+        }
+    };
+
+    return std::visit(check_string, value);
+}
+
+bool Interpreter::Visit(const SexpPattern& node, const Value& value) {
+    const std::string& tag = node.get_tag();
+    const std::vector<PatternPtr>& patterns = node.get_patterns();
+
+    auto check_sexp = Overload{
+        [](auto arg1)->bool {
+            return false;
+        },
+        [&](const std::shared_ptr<Sexp>& sexp)->bool {
+            if ((tag != sexp->tag) || (patterns.size() != sexp->values.size()))
+                return false;
+
+            for (std::size_t i = 0; i < patterns.size(); ++i) {
+                if (!patterns[i]->check(*this, sexp->values[i]))
+                    return false;
+            }
+
+            return true;
+        }
+    };
+
+    return std::visit(check_sexp, value);
+}
+
+bool Interpreter::Visit(const StringPattern& node, const Value& value) {
+    const std::string& target = node.get_value();
+
+    auto check_string = Overload{
+        [](auto arg1)->bool {
+            return false;
+        },
+        [&target](const std::shared_ptr<std::string>& value)->bool {
+            if (!target.empty() && target[0] == '#') {
+                if (target != "#string")
+                    return false;
+
+                return true;
+            }
+
+            return target == *value;
+        },
+        [&target](const std::shared_ptr<List>& value)->bool {
+            return target == "#array";
+        },
+        [&target](const std::shared_ptr<Sexp>& value)->bool {
+            return target == "#sexp";
+        },
+        [&target](const std::int64_t& value)->bool {
+            return target == "#int";
+        }
+    };
+
+    return std::visit(check_string, value);
+}
+
+bool Interpreter::Visit(const WildcardPattern, const Value& value) {
+    return true;
 }

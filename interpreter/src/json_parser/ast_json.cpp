@@ -168,7 +168,7 @@ ExprPtr expression(const Json& value, const std::string& path) {
         return std::make_unique<Const>(string_value);
     }
 
-    if (value.contains(json_format::SEXP) && value.contains(json_format::ARGS)) {
+    if (value.contains(json_format::SEXP)) {
         check_fields(value, path, {json_format::SEXP, json_format::ARGS});
 
         std::string tag = value.at(json_format::SEXP);
@@ -223,6 +223,90 @@ ExprPtr expression(const Json& value, const std::string& path) {
 
     fail(path, "unknown expression; expected var, elem access, const, var, elem access or binop");
 }
+
+PatternPtr parse_pattern(const Json& value, const std::string& path) {
+    if (value.is_number()) {
+        std::int64_t number = constant(value, path);
+
+        return std::make_unique<IntPattern>(number);
+    }
+
+    if (value.is_string()) {
+        return std::make_unique<StringPattern>(value);
+    }
+
+    if (value.contains(json_format::WILDCARD)) {
+        return std::make_unique<WildcardPattern>();
+    }
+
+    if (value.contains(json_format::BIND)) {
+        check_fields(value.at(json_format::BIND), 
+                     field_path(path, json_format::BIND), 
+                     {json_format::PATTERN, json_format::NAME});
+
+        const Json& bind = value.at(json_format::BIND);
+        const std::string& bind_path = field_path(path, json_format::BIND);
+
+        std::string name = bind.at(json_format::NAME);
+        PatternPtr pattern = parse_pattern(bind.at(json_format::PATTERN), field_path(bind_path, json_format::PATTERN));
+
+        return std::make_unique<BindPattern>(std::move(name), std::move(pattern));
+    }
+
+    if (value.contains(json_format::ARRAY)) {
+        check_fields(value, path, {json_format::ARRAY});
+
+        std::vector<PatternPtr> result{};
+
+        const Json& params = value.at(json_format::ARRAY);
+
+        for (std::size_t i = 0; i < params.size(); ++i) {
+            std::string elem_path = path + json_format::PATH_SEPARATOR + 
+                                    json_format::ARRAY +"[" + std::to_string(i) + "]";
+
+            result.push_back(parse_pattern(value.at(json_format::ARRAY)[i], elem_path));
+        }
+
+        return std::make_unique<ArrayPattern>(std::move(result));
+    }
+
+    if (value.contains(json_format::SEXP)) {
+        check_fields(value, path, {json_format::SEXP, json_format::ARGS});
+
+        std::string tag = value.at(json_format::SEXP);
+        std::vector<PatternPtr> args{};
+
+        const Json& params = value.at(json_format::ARGS);
+
+        for (std::size_t i = 0; i < params.size(); ++i) {
+            std::string elem_path = path + json_format::PATH_SEPARATOR + 
+                                    json_format::ARGS +"[" + std::to_string(i) + "]";
+
+            args.push_back(parse_pattern(value.at(json_format::ARGS)[i], elem_path));
+        }
+
+        return std::make_unique<SexpPattern>(std::move(tag), std::move(args));
+    }
+
+    fail(path, "unknown pattern format");
+}
+
+StmtPtr statement(const Json& value, const std::string& path);
+
+std::pair<PatternPtr, StmtPtr> parse_case(const Json& value, const std::string& path) {
+    check_object(value, path);
+
+    check_fields(value, path, {json_format::PATTERN, json_format::BRANCH});
+
+    StmtPtr branch = statement(value.at(json_format::BRANCH), field_path(path, json_format::BRANCH));
+    PatternPtr pattern = parse_pattern(value.at(json_format::PATTERN), field_path(path, json_format::PATTERN));
+
+    return std::make_pair<PatternPtr, StmtPtr>(std::move(pattern), std::move(branch));
+
+    const Json& pattern_json = value.at(json_format::PATTERN);
+    std::string pattern_path = field_path(path, json_format::PATTERN);
+}
+
 
 StmtPtr statement(const Json& value, const std::string& path) {
     if (value == json_format::SKIP)
@@ -318,10 +402,29 @@ StmtPtr statement(const Json& value, const std::string& path) {
         );
     }
 
+    if (tag == json_format::SWITCH) {
+        check_fields(body, here, {json_format::SCRUTINEE, json_format::BRANCHES});
+
+        ExprPtr scrutinee = expression(body.at(json_format::SCRUTINEE), field_path(here, json_format::SCRUTINEE));
+
+        const Json& branches = body.at(json_format::BRANCHES);
+
+        std::vector<std::pair<PatternPtr, StmtPtr>> cases;
+
+        for (std::size_t i = 0; i < branches.size(); ++i) {
+            std::string elem_path = path + json_format::PATH_SEPARATOR + 
+                                    json_format::SWITCH + json_format::PATH_SEPARATOR +
+                                    json_format::BRANCHES +"[" + std::to_string(i) + "]";
+
+            cases.push_back(parse_case(branches[i], elem_path));
+        }
+
+        return std::make_unique<SwitchStmt>(std::move(scrutinee), std::move(cases));
+    }
+
     fail(here, "unknown statement tag");
 }
 }
-
 
 
 ExprPtr expr_from_json(const std::string& text) {

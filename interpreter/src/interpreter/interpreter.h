@@ -6,6 +6,7 @@
 #include "input_provider.h"
 #include "output_provider.h"
 #include "bin_op_executor.h"
+#include "calls_stack.h"
 
 class Const;
 class Var;
@@ -23,6 +24,13 @@ class WriteStmt;
 class WhileStmt;
 class DoWhileStmt;
 class IfStmt;
+class SwitchStmt;
+class ArrayPattern;
+class BindPattern;
+class IntPattern;
+class SexpPattern;
+class StringPattern;
+class WildcardPattern;
 
 class Interpreter {
 public:
@@ -46,8 +54,16 @@ public:
     void Visit(const WhileStmt& node);
     void Visit(const DoWhileStmt& node);
     void Visit(const IfStmt& node);
+    void Visit(const SwitchStmt& node);
+
+    bool Visit(const ArrayPattern& node, const Value& value);
+    bool Visit(const BindPattern& node, const Value& value);
+    bool Visit(const IntPattern& node, const Value& value);
+    bool Visit(const SexpPattern& node, const Value& value);
+    bool Visit(const StringPattern& node, const Value& value);
+    bool Visit(const WildcardPattern, const Value& value);
 private:
-    std::unordered_map<std::string, Value> var_table_;
+    CallsStack calls_stack_;
     std::unique_ptr<InputProvider> input_provider_;
     std::unique_ptr<OutputProvider> output_provider_;
     BinOpExecutor bin_op_executor_;
