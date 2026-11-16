@@ -42,6 +42,15 @@ void CallsStack::AddScope() {
 }
 
 void CallsStack::SetValueForFunction(const std::string& id, Value value) {
+    std::vector<Scope>::iterator iter = data_.back().end();
+    do {
+        --iter;
+        if (iter->contains(id)) {
+            iter->at(id) = std::move(value);
+            return;
+        }
+    } while (iter != data_.back().begin());
+
     data_.back()[0][id] = std::move(value);
 }
 

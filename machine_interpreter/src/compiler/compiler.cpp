@@ -216,6 +216,130 @@ static void compile_expression(const nlohmann::json& value, const std::string& p
     fail(path, "unknown expression; expected const, string, var, binop, length, elem, array or sexp");
 }
 
+void compile_path(const std::vector<std::size_t>& path, std::vector<Command>& commands) {
+    commands.push_back(Command{Operation::Dup});
+
+    for (std::size_t pos : path) {
+        commands.push_back(Command{Operation::Const, static_cast<std::int64_t>(pos)});
+        commands.push_back(Command{Operation::Elem});
+    }
+}
+
+void compile_pattern(const nlohmann::json& value, const std::string& path, 
+                     std::vector<std::size_t>& value_path, const std::string& fail_label, 
+                     std::vector<Command>& commands) {
+    if (value.is_number()) {
+        compile_path(value_path, commands);
+        commands.push_back(Command{Operation::Const, constant(value, path)});
+        commands.push_back(Command{Operation::Binop, BinOp::Equal});
+        commands.push_back(Command{Operation::Jz, fail_label});
+        return;
+    }
+
+    if (value.is_string() && std::string_view(value)[0] == '#') {
+        compile_path(value_path, commands);
+        commands.push_back(Command{Operation::Patt, std::string(value)});
+        commands.push_back(Command{Operation::Jz, fail_label});
+        return;
+    }
+
+    if (value.is_string()) {
+        compile_path(value_path, commands);
+        commands.push_back(Command{Operation::String, std::string(value)});
+        commands.push_back(Command{Operation::Binop, BinOp::Equal});
+        commands.push_back(Command{Operation::Jz, fail_label});
+        return;
+    }
+
+    if (value.contains("wildcard")) {
+        return;
+    }
+
+    if (value.contains("bind")) {
+        check_fields(value.at("bind"), field_path(path, "bind"), {"pattern", "name"});
+
+        const nlohmann::json& bind = value.at("bind");
+        const std::string& bind_path = field_path(path, "bind");
+
+        compile_pattern(bind.at("pattern"), field_path(bind_path, "pattern"), value_path, fail_label, commands);
+
+        std::string name = bind.at("name");
+    
+        compile_path(value_path, commands);
+        commands.push_back(Command{Operation::St, name});
+
+        return;
+    }
+
+    if (value.contains("array")) {
+        check_fields(value, path, {"array"});
+
+        compile_path(value_path, commands);
+        commands.push_back(Command{Operation::Patt, "#array"});
+        commands.push_back(Command{Operation::Jz, fail_label});
+
+        const nlohmann::json& params = value.at("array");
+
+        for (std::size_t i = 0; i < params.size(); ++i) {
+            std::string elem_path = path + ".array[" + std::to_string(i) + "]";
+
+            value_path.push_back(i);
+            compile_pattern(value.at("array")[i], elem_path, value_path, fail_label, commands);
+            value_path.pop_back();
+        }
+
+        return;
+    }
+
+    if (value.contains("sexp")) {
+        check_fields(value, path, {"sexp", "args"});
+
+        const nlohmann::json& params = value.at("args");
+
+        SexpArg arg = SexpArg{value.at("sexp"), static_cast<std::int64_t>(params.size())};
+
+        compile_path(value_path, commands);
+        commands.push_back(Command{Operation::Patt, arg});
+        commands.push_back(Command{Operation::Jz, fail_label});
+
+        for (std::size_t i = 0; i < params.size(); ++i) {
+            std::string elem_path = path + ".args[" + std::to_string(i) + "]";
+
+            value_path.push_back(i);
+            compile_pattern(value.at("args")[i], elem_path, value_path, fail_label, commands);
+            value_path.pop_back();
+        }
+
+        return;
+    }
+
+    fail(path, "unknown pattern format");
+}
+
+void compile_statement(const nlohmann::json& value, const std::string& path,
+                       std::vector<Command>& commands, std::size_t& next_label);
+
+void compile_case(const nlohmann::json& value, const std::string& path, const std::string& end_label,
+                std::vector<Command>& commands, std::size_t& next_label) {
+    check_object(value, path);
+
+    check_fields(value, path, {"pattern", "branch"});
+
+    std::string fail_label = "L_" + std::to_string(next_label++);
+
+    std::vector<std::size_t> value_path;
+
+    commands.push_back(Command{Operation::Scope});
+    compile_pattern(value.at("pattern"), field_path(path, "pattern"), value_path, fail_label, commands);
+    commands.push_back(Command{Operation::Enter});
+
+    compile_statement(value.at("branch"), field_path(path, "branch"), commands, next_label);
+    commands.push_back(Command{Operation::Leave});
+    commands.push_back(Command{Operation::Jmp, end_label});
+    commands.push_back(Command{Operation::Label, fail_label});
+    commands.push_back(Command{Operation::Leave});
+}
+
 static void compile_statement(const nlohmann::json& value, const std::string& path,
                               std::vector<Command>& commands, std::size_t& next_label) {
     if (value.is_string() && value.get<std::string>() == "skip") {
@@ -316,6 +440,26 @@ static void compile_statement(const nlohmann::json& value, const std::string& pa
         commands.push_back(Command{Operation::Label, else_lbl});
         compile_statement(body.at("else"), field_path(here, "else"), commands, next_label);
         commands.push_back(Command{Operation::Label, end_lbl});
+        return;
+    }
+
+    if (tag == "switch") {
+        check_fields(body, here, {"scrutinee", "branches"});
+
+        compile_expression(body.at("scrutinee"), field_path(here, "scrutinee"), commands);
+
+        const nlohmann::json& branches = body.at("branches");
+
+        std::string end_lbl = "L_" + std::to_string(next_label++);
+
+        for (std::size_t i = 0; i < branches.size(); ++i) {
+            std::string elem_path = path + ".switch.branches[" + std::to_string(i) + "]";
+
+            compile_case(branches[i], elem_path, end_lbl, commands, next_label);
+        }
+
+        commands.push_back(Command{Operation::Label, end_lbl});
+        commands.push_back(Command{Operation::Drop});
         return;
     }
 

@@ -24,7 +24,13 @@ enum class Operation {
     Length,
     Elem,
     Set,
-    Sexp
+    Sexp,
+    Patt,
+    Dup,
+    Drop,
+    Scope,
+    Enter,
+    Leave
 };
 
 struct SexpArg {

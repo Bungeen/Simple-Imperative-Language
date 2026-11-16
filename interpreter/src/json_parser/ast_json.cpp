@@ -302,9 +302,6 @@ std::pair<PatternPtr, StmtPtr> parse_case(const Json& value, const std::string& 
     PatternPtr pattern = parse_pattern(value.at(json_format::PATTERN), field_path(path, json_format::PATTERN));
 
     return std::make_pair<PatternPtr, StmtPtr>(std::move(pattern), std::move(branch));
-
-    const Json& pattern_json = value.at(json_format::PATTERN);
-    std::string pattern_path = field_path(path, json_format::PATTERN);
 }
 
 
