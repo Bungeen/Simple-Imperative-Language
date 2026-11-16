@@ -247,7 +247,14 @@ std::pair<Value, std::string_view> Interpreter::parse_array(std::string_view inp
 std::pair<Value, std::string_view> Interpreter::parse_sexp_simple(std::string_view input) {
     auto [result, rest] = parse_values(input, '}');
 
-    return std::pair(std::make_shared<Sexp>("cons", std::move(result)), rest);
+    std::shared_ptr<Sexp> tail = std::make_shared<Sexp>("nil", List());
+
+    for (std::int64_t i = result.size() - 1; i >= 0; --i) {
+        List new_args = List({std::move(result[i]), std::move(tail)});
+        tail = std::make_shared<Sexp>("cons", std::move(new_args));
+    }
+
+    return std::pair(std::move(tail), rest);
 }
 
 std::pair<Value, std::string_view> Interpreter::parse_sexp(std::string_view input) {

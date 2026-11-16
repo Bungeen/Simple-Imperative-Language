@@ -107,7 +107,7 @@ Value BinOpExecutor::Remainder(const Value& lhs, const Value& rhs) {
 std::int64_t BinOpExecutor::Compare(const Value& lhs, const Value& rhs) {
     auto operations = Overload{
         [](auto lhs, auto rhs) -> std::int64_t {
-            throw std::logic_error(std::string("Invalid types for compare") + typeid(lhs).name() + typeid(rhs).name());
+            throw std::logic_error("Invalid types for compare");
         },
         [](std::int64_t lhs, std::int64_t rhs) -> std::int64_t {
             return lhs - rhs;
