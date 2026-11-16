@@ -25,6 +25,14 @@ Value BinOpExecutor::Sum(const Value& lhs, const Value& rhs) {
            const std::shared_ptr<std::string>& rhs) -> Value {
             return std::make_shared<std::string>(*lhs + *rhs);
         },
+        [](const std::shared_ptr<std::string>& lhs, 
+           std::int64_t rhs) -> Value {
+            return std::make_shared<std::string>(*lhs + std::to_string(rhs));
+        },
+        [](std::int64_t lhs, 
+           const std::shared_ptr<std::string>& rhs) -> Value {
+            return std::make_shared<std::string>(std::to_string(lhs) + *rhs);
+        },
         [](const std::shared_ptr<List>& lhs, 
            const std::shared_ptr<List>& rhs) -> Value {
             std::vector<Value> res(lhs->begin(), lhs->end());
@@ -113,11 +121,45 @@ std::int64_t BinOpExecutor::Compare(const Value& lhs, const Value& rhs) {
 }
 
 Value BinOpExecutor::Equal(const Value& lhs, const Value& rhs) {
-    return static_cast<std::int64_t>(Compare(lhs, rhs) == 0);
+    auto equal = Overload{
+        [](auto lhs, auto rhs) -> std::int64_t {
+            throw std::logic_error(std::string("Invalid types for compare") + typeid(lhs).name() + typeid(rhs).name());
+        },
+        [](std::int64_t lhs, std::int64_t rhs) -> std::int64_t {
+            return lhs == rhs;
+        },
+        [](const std::shared_ptr<std::string>& lhs, const std::shared_ptr<std::string>& rhs) -> std::int64_t {
+            return *lhs == *rhs;
+        },
+        [this](const std::shared_ptr<List>& lhs, const std::shared_ptr<List>& rhs) -> std::int64_t {
+            if (lhs->size() != rhs->size())
+                return false;
+
+            for (std::size_t i = 0; i < lhs->size(); ++i) {
+                if (!Compare(lhs->at(i), rhs->at(i)))
+                    return false;
+            }
+
+            return true;
+        },
+        [this](const std::shared_ptr<Sexp>& lhs, const std::shared_ptr<Sexp>& rhs) -> std::int64_t {
+            if ((lhs->tag != rhs->tag) || (lhs->values.size() != rhs->values.size()))
+                return false;
+
+            for (std::size_t i = 0; i < lhs->values.size(); ++i) {
+                if (!Compare(lhs->values[i], rhs->values[i]))
+                    return false;
+            }
+
+            return true;
+        }
+    };
+
+    return std::visit(equal, lhs, rhs);
 }
 
 Value BinOpExecutor::NotEqual(const Value& lhs, const Value& rhs) {
-    return static_cast<std::int64_t>(Compare(lhs, rhs) != 0);
+    return !Equal(lhs, rhs);
 }
 
 Value BinOpExecutor::Less(const Value& lhs, const Value& rhs) {
