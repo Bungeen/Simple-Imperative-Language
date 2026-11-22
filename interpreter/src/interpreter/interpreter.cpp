@@ -498,3 +498,101 @@ bool Interpreter::Visit(const StringPattern& node, const Value& value) {
 bool Interpreter::Visit(const WildcardPattern, const Value& value) {
     return true;
 }
+
+namespace {
+struct ReturnException {
+    Value value;
+};
+}
+
+Value Interpreter::Visit(const CallExpr& node) {
+    const auto& args = node.get_args();
+    std::vector<Value> arg_values;
+    arg_values.reserve(args.size());
+    for (const auto& arg : args) {
+        arg_values.push_back(arg->evaluate(*this));
+    }
+
+    const FunctionDef& func = calls_stack_.GetFunctionDef(node.get_name());
+    if (func.params.size() != arg_values.size()) {
+        throw std::logic_error("Argument count mismatch in function call: " + node.get_name());
+    }
+
+    calls_stack_.AddFunction();
+    for (std::size_t i = 0; i < func.params.size(); ++i) {
+        calls_stack_.SetValueForScope(func.params[i], std::move(arg_values[i]));
+    }
+
+    try {
+        func.body->execute(*this);
+        calls_stack_.RemoveFunction();
+        return static_cast<std::int64_t>(0);
+    } catch (const ReturnException& ret) {
+        calls_stack_.RemoveFunction();
+        return ret.value;
+    } catch (...) {
+        calls_stack_.RemoveFunction();
+        throw;
+    }
+}
+
+void Interpreter::Visit(const CallStmt& node) {
+    const auto& args = node.get_args();
+    std::vector<Value> arg_values;
+    arg_values.reserve(args.size());
+    for (const auto& arg : args) {
+        arg_values.push_back(arg->evaluate(*this));
+    }
+
+    const FunctionDef& func = calls_stack_.GetFunctionDef(node.get_name());
+    if (func.params.size() != arg_values.size()) {
+        throw std::logic_error("Argument count mismatch in function call: " + node.get_name());
+    }
+
+    calls_stack_.AddFunction();
+    for (std::size_t i = 0; i < func.params.size(); ++i) {
+        calls_stack_.SetValueForScope(func.params[i], std::move(arg_values[i]));
+    }
+
+    try {
+        func.body->execute(*this);
+        calls_stack_.RemoveFunction();
+    } catch (const ReturnException&) {
+        calls_stack_.RemoveFunction();
+    } catch (...) {
+        calls_stack_.RemoveFunction();
+        throw;
+    }
+}
+
+void Interpreter::Visit(const ScopeStmt& node) {
+    calls_stack_.AddScope();
+    try {
+        for (const auto& decl : node.get_decls()) {
+            decl->execute(*this);
+        }
+        node.get_body().execute(*this);
+        calls_stack_.RemoveScope();
+    } catch (...) {
+        calls_stack_.RemoveScope();
+        throw;
+    }
+}
+
+void Interpreter::Visit(const VarDecl& node) {
+    Value val = node.has_init() ? node.get_init().evaluate(*this) : Value(static_cast<std::int64_t>(0));
+    calls_stack_.SetValueForScope(node.get_name(), std::move(val));
+}
+
+void Interpreter::Visit(const FunDecl& node) {
+    calls_stack_.AddFunctionDef(FunctionDef{
+        node.get_name(),
+        node.get_params(),
+        node.get_body_ptr()
+    });
+}
+
+void Interpreter::Visit(const ReturnStmt& node) {
+    Value val = node.has_expr() ? node.get_expr().evaluate(*this) : Value(static_cast<std::int64_t>(0));
+    throw ReturnException{std::move(val)};
+}
