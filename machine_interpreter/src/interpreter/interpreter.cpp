@@ -13,6 +13,7 @@
 #include "command.h"
 #include "interpreter.h"
 #include "value.h"
+#include "calls_stack.h"
 
 Interpreter::Interpreter(std::unique_ptr<InputProvider> input_provider,
                          std::unique_ptr<OutputProvider> output_provider) 
@@ -26,96 +27,109 @@ std::string_view Interpreter::trim(std::string_view input) {
         return input;
 
     std::size_t left_bound = input.find_first_not_of(" \t\n\r\v\f");
-    if (left_bound == std::string_view::npos)
-        return {};
     std::size_t right_bound = input.find_last_not_of(" \t\n\r\v\f");
 
     return input.substr(left_bound, right_bound - left_bound + 1);
 }
 
 std::pair<Value, std::string_view> Interpreter::parse_num(std::string_view input) {
-    std::int64_t value = 0;
-    auto [ptr, ec] = std::from_chars(input.data(), input.data() + input.size(), value);
-    if (ec != std::errc())
+    std::int64_t value;
+
+     auto [ptr, ec] = std::from_chars(input.data(), input.data() + input.size(), value);
+
+     if (ec != std::errc())
         throw std::invalid_argument("invalid input");
 
-    std::string_view rest = trim(std::string_view(ptr, input.data() + input.size() - ptr));
-    return {value, rest};
+    std::string_view rest = trim(std::string_view(ptr, input.data() + input.size()));
+
+    return std::pair(value, rest);
 }
 
 std::pair<Value, std::string_view> Interpreter::parse_string(std::string_view input) {
-    std::string_view rest = input.substr(1);
-    std::size_t str_end = rest.find('\"');
-    if (str_end == std::string_view::npos)
+    std::string_view rest = input.substr(1, input.size() - 1);
+
+    std::size_t str_end = rest.find("\"");
+
+    if (str_end == rest.size())
         throw std::invalid_argument("invalid input");
 
     Value result = std::make_shared<std::string>(rest.substr(0, str_end));
-    rest = trim(rest.substr(str_end + 1));
-    return {result, rest};
+
+    rest = rest.substr(str_end + 1, rest.size() - str_end - 1);
+
+    return std::pair(result, rest);
 }
 
 std::pair<Value, std::string_view> Interpreter::parse_char(std::string_view input) {
-    if (input.size() < 3 || input[2] != '\'')
+    if ((input.size() < 3) || input[2] != '\'')
         throw std::invalid_argument("invalid input");
 
-    std::int64_t result = static_cast<unsigned char>(input[1]);
-    std::string_view rest = trim(input.substr(3));
-    return {result, rest};
+    std::int64_t result = input[1];
+    std::string_view rest = input.substr(3, input.size() - 3);
+
+    return std::pair(result, rest);
 }
 
-std::pair<List, std::string_view> Interpreter::parse_values(std::string_view input, char stop) {
+std::pair<List, std::string_view> Interpreter::parse_values(std::string_view input, char stop){
     List result;
-    std::string_view rest = trim(input.substr(1));
 
-    while (!rest.empty() && rest.front() != stop) {
+    std::string_view rest = trim(input.substr(1, input.size() - 1));
+
+    while (rest[0] != stop) {
         auto [value, next_rest] = parse_impl(rest);
+
         result.push_back(value);
+
         rest = trim(next_rest);
 
-        if (rest.empty() || (rest.front() != stop && rest.front() != ','))
+        if (rest.empty() || ((rest[0] != stop) && (rest[0] != ',')))
             throw std::invalid_argument("invalid input");
 
-        if (rest.front() == ',')
-            rest = trim(rest.substr(1));
+        if (rest[0] == ',')
+            rest = trim(rest.substr(1, rest.size() - 1));
     }
 
-    if (rest.empty() || rest.front() != stop)
-        throw std::invalid_argument("invalid input");
+    rest = rest.substr(1, rest.size() - 1);
 
-    rest = trim(rest.substr(1));
-    return {std::move(result), rest};
+    return std::pair(std::move(result), rest);
 }
 
 std::pair<Value, std::string_view> Interpreter::parse_array(std::string_view input) {
     auto [result, rest] = parse_values(input, ']');
-    return {std::make_shared<List>(std::move(result)), rest};
+
+    return std::pair(std::make_shared<List>(std::move(result)), rest);
 }
 
 std::pair<Value, std::string_view> Interpreter::parse_sexp_simple(std::string_view input) {
     auto [result, rest] = parse_values(input, '}');
-    auto sexp = std::make_shared<Sexp>();
-    sexp->tag = "cons";
-    sexp->values = std::move(result);
-    return {sexp, rest};
+
+    std::shared_ptr<Sexp> tail = std::make_shared<Sexp>("nil", List());
+
+    for (std::int64_t i = result.size() - 1; i >= 0; --i) {
+        List new_args = List({std::move(result[i]), std::move(tail)});
+        tail = std::make_shared<Sexp>("cons", std::move(new_args));
+    }
+
+    return std::pair(std::move(tail), rest);
 }
 
 std::pair<Value, std::string_view> Interpreter::parse_sexp(std::string_view input) {
     std::string tag;
-    while (!input.empty() && ((input.front() >= 'A' && input.front() <= 'Z') || 
-                              (input.front() >= 'a' && input.front() <= 'z'))) {
+
+    while (((input.front() >= 'A') && (input.front() <= 'Z')) || 
+           ((input.front() >= 'a') && (input.front() <= 'z'))) {
         tag += input.front();
-        input = input.substr(1);
+        input = input.substr(1, input.size() - 1);
     }
 
     input = trim(input);
-    if (input.empty() || input.front() != '(')
+
+    if (input.front() != '(')
         throw std::invalid_argument("invalid input");
 
     auto [values, rest] = parse_values(input, ')');
-    auto sexp = std::make_shared<Sexp>();
-    sexp->tag = std::move(tag);
-    sexp->values = std::move(values);
-    return {sexp, rest};
+
+    return std::pair(std::make_shared<Sexp>(tag, std::move(values)), rest);
 }
 
 std::pair<Value, std::string_view> Interpreter::parse_impl(std::string_view input) {
@@ -123,18 +137,19 @@ std::pair<Value, std::string_view> Interpreter::parse_impl(std::string_view inpu
         throw std::invalid_argument("invalid input");
 
     input = trim(input);
+
     if (input.front() == '[')
         return parse_array(input);
-    if ((input.front() >= 'A' && input.front() <= 'Z') || (input.front() >= 'a' && input.front() <= 'z'))
+    else if ((input.front() >= 'A') && (input.front() <= 'Z'))
         return parse_sexp(input);
-    if (input.front() == '{')
+    else if (input.front() == '{')
         return parse_sexp_simple(input);
-    if (input.front() == '\"')
+    else if (input.front() == '\"') 
         return parse_string(input);
-    if (input.front() == '\'')
+    else if (input.front() == '\'')
         return parse_char(input);
-
-    return parse_num(input);
+    else
+        return parse_num(input);
 }
 
 void Interpreter::print_impl(const Value& to_print, bool top_level) {
@@ -182,7 +197,8 @@ void Interpreter::interpret(std::vector<Command> program) {
     }
 
     std::stack<Value, std::vector<Value>> stack;
-    std::unordered_map<std::string, Value> variables;
+    CallsStack variables;
+    bool in_scope = false;
 
     std::size_t pointer = 0;
 
@@ -220,12 +236,18 @@ void Interpreter::interpret(std::vector<Command> program) {
                 break;
             }
             case Operation::Ld:
-                stack.push(variables.at(std::get<std::string>(program[pointer].argument)));
+                stack.push(variables.Get(std::get<std::string>(program[pointer].argument)));
                 break;
-            case Operation::St:
-                variables[std::get<std::string>(program[pointer].argument)] = stack.top();
+            case Operation::St: {
+                std::string var_name = std::get<std::string>(program[pointer].argument);
+
+                if (in_scope)
+                    variables.SetValueForScope(var_name, stack.top());
+                else
+                    variables.SetValueForFunction(var_name, stack.top());
                 stack.pop();
                 break;
+            }
             case Operation::Const:
                 stack.push(std::get<std::int64_t>(program[pointer].argument));
                 break;
@@ -381,6 +403,54 @@ void Interpreter::interpret(std::vector<Command> program) {
                     pointer = labels[std::get<std::string>(program[pointer].argument)];
                 stack.pop();
                 break;
+            case Operation::Patt: {
+                Value value = stack.top();
+                stack.pop();
+
+                CommandArgument arg = program[pointer].argument;
+
+                auto matching = Overload(
+                    [](auto arg1, auto arg2)->std::int64_t {
+                        throw std::logic_error("Invalid types for pattern matching");
+                    },
+                    [](const std::shared_ptr<Sexp>& sexp, const SexpArg& pattern)->std::int64_t {
+                        return (sexp->tag == pattern.tag) && (sexp->values.size() == pattern.count);
+                    },
+                    [](const std::shared_ptr<Sexp>& sexp, const std::string& pattern)->std::int64_t {
+                        return pattern == "#sexp";
+                    },
+                    [](const std::shared_ptr<List>& list, const std::string& pattern)->std::int64_t {
+                        return pattern == "#array";
+                    },
+                    [](const std::shared_ptr<std::string>& str, const std::string& pattern)->std::int64_t {
+                        return pattern == "#string";
+                    },
+                    [](std::int64_t number, const std::string& pattern)->std::int64_t {
+                        return pattern == "#int";
+                    }
+                );
+
+                stack.push(std::visit(matching, value, arg));
+                break;
+            }
+            case Operation::Dup:
+                stack.push(stack.top());
+                break;
+            case Operation::Drop:
+                stack.pop();
+                break;
+            case Operation::Scope:
+                variables.AddScope();
+                in_scope = true;
+                break;
+            case Operation::Enter:
+                in_scope = false;
+                break;
+            case Operation::Leave:
+                variables.RemoveScope();
+                break;
+            default:
+                throw std::logic_error("unexpected command");
         }
 
         pointer++;

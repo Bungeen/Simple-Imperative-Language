@@ -23,3 +23,12 @@
 #include "skip_stmt.h"
 #include "while_stmt.h"
 #include "write_stmt.h"
+#include "switch_stmt.h"
+
+#include "array_pattern.h"
+#include "bind_pattern.h"
+#include "int_pattern.h"
+#include "pattern.h"
+#include "sexp_pattern.h"
+#include "string_pattern.h"
+#include "wildcard_pattern.h"
