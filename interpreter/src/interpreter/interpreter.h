@@ -15,6 +15,8 @@ class Length;
 class BinOpExpr;
 class ListExpr;
 class SexpExpr;
+class CallExpr;
+
 class SkipStmt;
 class SeqStmt;
 class AssignStmt;
@@ -25,6 +27,11 @@ class WhileStmt;
 class DoWhileStmt;
 class IfStmt;
 class SwitchStmt;
+class ScopeStmt;
+class VarDecl;
+class FunDecl;
+class ReturnStmt;
+class CallStmt;
 class ArrayPattern;
 class BindPattern;
 class IntPattern;
@@ -44,6 +51,7 @@ public:
     Value Visit(const BinOpExpr& node);
     Value Visit(const ListExpr& node);
     Value Visit(const SexpExpr& node);
+    Value Visit(const CallExpr& node);
 
     void Visit(const SkipStmt& node);
     void Visit(const SeqStmt& node);
@@ -55,6 +63,11 @@ public:
     void Visit(const DoWhileStmt& node);
     void Visit(const IfStmt& node);
     void Visit(const SwitchStmt& node);
+    void Visit(const ScopeStmt& node);
+    void Visit(const VarDecl& node);
+    void Visit(const FunDecl& node);
+    void Visit(const ReturnStmt& node);
+    void Visit(const CallStmt& node);
 
     bool Visit(const ArrayPattern& node, const Value& value);
     bool Visit(const BindPattern& node, const Value& value);

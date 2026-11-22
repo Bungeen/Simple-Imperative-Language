@@ -12,6 +12,7 @@
 #include "length_expression.h"
 #include "list_expression.h"
 #include "sexp_expression.h"
+#include "call_expression.h"
 
 #include "stmt.h"
 #include "assign_stmt.h"
@@ -24,6 +25,11 @@
 #include "while_stmt.h"
 #include "write_stmt.h"
 #include "switch_stmt.h"
+#include "scope_stmt.h"
+#include "var_decl.h"
+#include "fun_decl.h"
+#include "return_stmt.h"
+#include "call_stmt.h"
 
 #include "array_pattern.h"
 #include "bind_pattern.h"

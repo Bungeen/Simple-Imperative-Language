@@ -42,6 +42,14 @@ inline const std::string PATTERN = "pattern";
 inline const std::string BIND = "bind";
 inline const std::string NAME = "name";
 inline const std::string WILDCARD = "wildcard";
+inline const std::string SCOPE = "scope";
+inline const std::string DECLS = "decls";
+inline const std::string FUN = "fun";
+inline const std::string CALL = "call";
+inline const std::string RETURN = "return";
+inline const std::string PARAMS = "params";
+inline const std::string SPEC = "spec";
+inline const std::string EXPR = "expr";
 
 inline const std::string ROOT_PATH = "$";
 inline const std::string PATH_SEPARATOR = ".";

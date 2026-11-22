@@ -221,6 +221,40 @@ ExprPtr expression(const Json& value, const std::string& path) {
         return std::make_unique<ListExpr>(std::move(result));
     }
 
+    if (value.contains(json_format::CALL)) {
+        const Json& call_json = value.at(json_format::CALL);
+        const std::string call_path = field_path(path, json_format::CALL);
+        check_object(call_json, call_path);
+
+        std::string name;
+        for (const auto& key : {json_format::FUN, json_format::NAME, json_format::VAR}) {
+            if (call_json.contains(key)) {
+                name = identifier(call_json.at(key), field_path(call_path, key));
+                break;
+            }
+        }
+
+        if (name.empty()) {
+            fail(call_path, "missing function name in call");
+        }
+
+        std::vector<ExprPtr> args;
+        std::string args_key = call_json.contains(json_format::ARGS) ? json_format::ARGS : json_format::PARAMS;
+        if (call_json.contains(args_key)) {
+            const Json& args_json = call_json.at(args_key);
+            if (!args_json.is_array()) {
+                fail(field_path(call_path, args_key), "expected array of arguments");
+            }
+
+            for (std::size_t i = 0; i < args_json.size(); ++i) {
+                std::string arg_path = field_path(call_path, args_key) + "[" + std::to_string(i) + "]";
+                args.push_back(expression(args_json[i], arg_path));
+            }
+        }
+
+        return std::make_unique<CallExpr>(std::move(name), std::move(args));
+    }
+
     fail(path, "unknown expression; expected var, elem access, const, var, elem access or binop");
 }
 
@@ -292,6 +326,150 @@ PatternPtr parse_pattern(const Json& value, const std::string& path) {
 }
 
 StmtPtr statement(const Json& value, const std::string& path);
+
+StmtPtr parse_var_decl(const Json& value, const std::string& path) {
+    if (value.is_string()) {
+        return std::make_unique<VarDecl>(identifier(value, path), nullptr);
+    }
+
+    check_object(value, path);
+    std::string name;
+    for (const auto& key : {json_format::NAME, json_format::VAR}) {
+        if (value.contains(key)) {
+            name = identifier(value.at(key), field_path(path, key));
+            break;
+        }
+    }
+    if (name.empty()) {
+        fail(path, "missing variable name in var declaration");
+    }
+
+    for (const auto& key : {json_format::VALUE, json_format::INIT, json_format::SRC, json_format::EXPR}) {
+        if (value.contains(key)) {
+            return std::make_unique<VarDecl>(std::move(name), expression(value.at(key), field_path(path, key)));
+        }
+    }
+
+    return std::make_unique<VarDecl>(std::move(name), nullptr);
+}
+
+StmtPtr parse_fun_decl(const Json& value, const std::string& path) {
+    check_object(value, path);
+    std::string name;
+    for (const auto& key : {json_format::NAME, json_format::VAR}) {
+        if (value.contains(key)) {
+            name = identifier(value.at(key), field_path(path, key));
+            break;
+        }
+    }
+
+    if (name.empty()) {
+        fail(path, "missing function name in fun declaration");
+    }
+
+    std::vector<std::string> params;
+    std::string params_key = value.contains(json_format::ARGS) ? json_format::ARGS : json_format::PARAMS;
+    if (value.contains(params_key)) {
+        const Json& params_json = value.at(params_key);
+        if (!params_json.is_array()) {
+            fail(field_path(path, params_key), "expected array of parameter names");
+        }
+
+        for (std::size_t i = 0; i < params_json.size(); ++i) {
+            std::string p_path = field_path(path, params_key) + "[" + std::to_string(i) + "]";
+            params.push_back(identifier(params_json[i], p_path));
+        }
+    }
+
+    if (!value.contains(json_format::BODY)) {
+        fail(path, "missing body in function declaration");
+    }
+
+    return std::make_unique<FunDecl>(std::move(name), std::move(params), statement(value.at(json_format::BODY), field_path(path, json_format::BODY)));
+}
+
+StmtPtr parse_decl(const Json& value, const std::string& path) {
+    check_object(value, path);
+    if (value.contains(json_format::NAME) && value.contains(json_format::SPEC)) {
+        std::string name = identifier(value.at(json_format::NAME), field_path(path, json_format::NAME));
+        const Json& spec = value.at(json_format::SPEC);
+        const std::string spec_path = field_path(path, json_format::SPEC);
+
+        if (spec.is_string() && spec.get<std::string>() == json_format::VAR) {
+            return std::make_unique<VarDecl>(std::move(name), nullptr);
+        }
+
+        if (spec.is_object() && spec.contains(json_format::FUN)) {
+            const Json& fun_obj = spec.at(json_format::FUN);
+            const std::string fun_path = field_path(spec_path, json_format::FUN);
+            check_object(fun_obj, fun_path);
+
+            std::vector<std::string> params;
+            std::string params_key = fun_obj.contains(json_format::ARGS) ? json_format::ARGS : json_format::PARAMS;
+            if (fun_obj.contains(params_key)) {
+                const Json& params_json = fun_obj.at(params_key);
+
+                if (!params_json.is_array()) {
+                    fail(field_path(fun_path, params_key), "expected array of parameter names");
+                }
+
+                for (std::size_t i = 0; i < params_json.size(); ++i) {
+                    std::string p_path = field_path(fun_path, params_key) + "[" + std::to_string(i) + "]";
+                    params.push_back(identifier(params_json[i], p_path));
+                }
+            }
+
+            if (!fun_obj.contains(json_format::BODY)) {
+                fail(fun_path, "missing body in function declaration");
+            }
+
+            return std::make_unique<FunDecl>(std::move(name), std::move(params), statement(fun_obj.at(json_format::BODY), field_path(fun_path, json_format::BODY)));
+        }
+
+        if (spec.is_object() && spec.contains(json_format::VAR)) {
+            const Json& var_obj = spec.at(json_format::VAR);
+            const std::string var_path = field_path(spec_path, json_format::VAR);
+            ExprPtr init = nullptr;
+            if (var_obj.is_object()) {
+                if (var_obj.contains(json_format::VALUE)) {
+                    init = expression(var_obj.at(json_format::VALUE), field_path(var_path, json_format::VALUE));
+                } else if (var_obj.contains(json_format::INIT)) {
+                    init = expression(var_obj.at(json_format::INIT), field_path(var_path, json_format::INIT));
+                } else if (var_obj.contains(json_format::SRC)) {
+                    init = expression(var_obj.at(json_format::SRC), field_path(var_path, json_format::SRC));
+                } else if (var_obj.contains(json_format::EXPR)) {
+                    init = expression(var_obj.at(json_format::EXPR), field_path(var_path, json_format::EXPR));
+                }
+            }
+
+            return std::make_unique<VarDecl>(std::move(name), std::move(init));
+        }
+    }
+
+    if (value.contains(json_format::VAR)) {
+        const Json& var_content = value.at(json_format::VAR);
+        if (var_content.is_array()) {
+            if (var_content.empty()) return std::make_unique<SkipStmt>();
+
+            StmtPtr res = parse_var_decl(var_content[0], field_path(path, json_format::VAR) + "[0]");
+
+            for (std::size_t i = 1; i < var_content.size(); ++i) {
+                StmtPtr next = parse_var_decl(var_content[i], field_path(path, json_format::VAR) + "[" + std::to_string(i) + "]");
+                res = std::make_unique<SeqStmt>(std::move(res), std::move(next));
+            }
+
+            return res;
+        }
+
+        return parse_var_decl(var_content, field_path(path, json_format::VAR));
+    }
+
+    if (value.contains(json_format::FUN)) {
+        return parse_fun_decl(value.at(json_format::FUN), field_path(path, json_format::FUN));
+    }
+
+    return statement(value, path);
+}
 
 std::pair<PatternPtr, StmtPtr> parse_case(const Json& value, const std::string& path) {
     check_object(value, path);
@@ -417,6 +595,99 @@ StmtPtr statement(const Json& value, const std::string& path) {
         }
 
         return std::make_unique<SwitchStmt>(std::move(scrutinee), std::move(cases));
+    }
+
+    if (tag == json_format::SCOPE) {
+        check_object(body, here);
+        std::vector<StmtPtr> decls;
+        if (body.contains(json_format::DECLS)) {
+            const Json& decls_json = body.at(json_format::DECLS);
+            if (!decls_json.is_array()) {
+                fail(field_path(here, json_format::DECLS), "expected array of declarations");
+            }
+
+            for (std::size_t i = 0; i < decls_json.size(); ++i) {
+                std::string decl_path = field_path(here, json_format::DECLS) + "[" + std::to_string(i) + "]";
+                decls.push_back(parse_decl(decls_json[i], decl_path));
+            }
+        }
+
+        StmtPtr body_stmt;
+        if (body.contains(json_format::BODY)) {
+            const Json& body_json = body.at(json_format::BODY);
+            if (body_json.is_array()) {
+                if (body_json.empty()) {
+                    body_stmt = std::make_unique<SkipStmt>();
+                } else {
+                    body_stmt = statement(body_json[0], field_path(here, json_format::BODY) + "[0]");
+                    for (std::size_t i = 1; i < body_json.size(); ++i) {
+                        StmtPtr next = statement(body_json[i], field_path(here, json_format::BODY) + "[" + std::to_string(i) + "]");
+                        body_stmt = std::make_unique<SeqStmt>(std::move(body_stmt), std::move(next));
+                    }
+                }
+            } else {
+                body_stmt = statement(body_json, field_path(here, json_format::BODY));
+            }
+        } else {
+            body_stmt = std::make_unique<SkipStmt>();
+        }
+
+        return std::make_unique<ScopeStmt>(std::move(decls), std::move(body_stmt));
+    }
+
+    if (tag == json_format::RETURN) {
+        if (body.is_null()) {
+            return std::make_unique<ReturnStmt>(nullptr);
+        }
+
+        if (body.is_object()) {
+            for (const auto& key : {json_format::EXPR, json_format::VALUE}) {
+                if (body.contains(key)) {
+                    return std::make_unique<ReturnStmt>(expression(body.at(key), field_path(here, key)));
+                }
+            }
+        }
+
+        return std::make_unique<ReturnStmt>(expression(body, here));
+    }
+
+    if (tag == json_format::CALL) {
+        check_object(body, here);
+        std::string name;
+        for (const auto& key : {json_format::FUN, json_format::NAME, json_format::VAR}) {
+            if (body.contains(key)) {
+                name = identifier(body.at(key), field_path(here, key));
+                break;
+            }
+        }
+
+        if (name.empty()) {
+            fail(here, "missing function name in call");
+        }
+
+        std::vector<ExprPtr> args;
+        std::string args_key = body.contains(json_format::ARGS) ? json_format::ARGS : json_format::PARAMS;
+        if (body.contains(args_key)) {
+            const Json& args_json = body.at(args_key);
+            if (!args_json.is_array()) {
+                fail(field_path(here, args_key), "expected array of arguments");
+            }
+
+            for (std::size_t i = 0; i < args_json.size(); ++i) {
+                std::string arg_path = field_path(here, args_key) + "[" + std::to_string(i) + "]";
+                args.push_back(expression(args_json[i], arg_path));
+            }
+        }
+
+        return std::make_unique<CallStmt>(std::move(name), std::move(args));
+    }
+
+    if (tag == json_format::VAR) {
+        return parse_var_decl(body, here);
+    }
+
+    if (tag == json_format::FUN) {
+        return parse_fun_decl(body, here);
     }
 
     fail(here, "unknown statement tag");
